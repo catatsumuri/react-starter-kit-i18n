@@ -1,11 +1,11 @@
 import { Head, setLayoutProps } from '@inertiajs/react';
-import { lang } from '@erag/lang-sync-inertia/react';
+import { useLang } from '@erag/lang-sync-inertia/react';
 import AppearanceTabs from '@/components/appearance-tabs';
 import Heading from '@/components/heading';
 import { edit as editAppearance } from '@/routes/appearance';
 
 export default function Appearance() {
-    const { __ } = lang();
+    const { __ } = useLang();
 
     setLayoutProps({
         breadcrumbs: [

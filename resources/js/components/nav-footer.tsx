@@ -1,5 +1,5 @@
 import type { ComponentPropsWithoutRef } from 'react';
-import { lang } from '@erag/lang-sync-inertia/react';
+import { useLang } from '@erag/lang-sync-inertia/react';
 import {
     SidebarGroup,
     SidebarGroupContent,
@@ -17,7 +17,7 @@ export function NavFooter({
 }: ComponentPropsWithoutRef<typeof SidebarGroup> & {
     items: NavItem[];
 }) {
-    const { __ } = lang();
+    const { __ } = useLang();
 
     return (
         <SidebarGroup

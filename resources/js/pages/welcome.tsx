@@ -1,5 +1,5 @@
 import { Head, Link, usePage } from '@inertiajs/react';
-import { lang } from '@erag/lang-sync-inertia/react';
+import { useLang } from '@erag/lang-sync-inertia/react';
 import { dashboard, login } from '@/routes';
 /* @chisel-registration */
 import { register } from '@/routes';
@@ -7,7 +7,7 @@ import { register } from '@/routes';
 
 export default function Welcome() {
     const { auth } = usePage().props;
-    const { __ } = lang();
+    const { __ } = useLang();
 
     return (
         <>

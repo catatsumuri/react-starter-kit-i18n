@@ -1,5 +1,5 @@
 import { Form, Head, setLayoutProps } from '@inertiajs/react';
-import { lang } from '@erag/lang-sync-inertia/react';
+import { useLang } from '@erag/lang-sync-inertia/react';
 import InputError from '@/components/input-error';
 import PasswordInput from '@/components/password-input';
 import TextLink from '@/components/text-link';
@@ -23,7 +23,7 @@ type Props = {
 };
 
 export default function Login({ status, canResetPassword }: Props) {
-    const { __ } = lang();
+    const { __ } = useLang();
 
     setLayoutProps({
         title: __('Log in to your account'),

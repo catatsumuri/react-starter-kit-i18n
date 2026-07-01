@@ -1,6 +1,6 @@
 import { router } from '@inertiajs/react';
 import { KeyRound } from 'lucide-react';
-import { lang } from '@erag/lang-sync-inertia/react';
+import { useLang } from '@erag/lang-sync-inertia/react';
 import { destroy } from '@/actions/Laravel/Passkeys/Http/Controllers/PasskeyRegistrationController';
 import Heading from '@/components/heading';
 import PasskeyItem from '@/components/passkey-item';
@@ -13,7 +13,7 @@ export type Props = {
 };
 
 const EmptyState = () => {
-    const { __ } = lang();
+    const { __ } = useLang();
 
     return (
         <div className="p-8 text-center">
@@ -29,7 +29,7 @@ const EmptyState = () => {
 };
 
 export default function ManagePasskeys(props: Props) {
-    const { __ } = lang();
+    const { __ } = useLang();
     const passkeys = props.passkeys ?? [];
 
     const handleDelete = (id: number, onError: () => void) => {

@@ -1,6 +1,6 @@
 import { Link, router } from '@inertiajs/react';
 import { LogOut, Settings } from 'lucide-react';
-import { lang } from '@erag/lang-sync-inertia/react';
+import { useLang } from '@erag/lang-sync-inertia/react';
 import {
     DropdownMenuGroup,
     DropdownMenuItem,
@@ -18,7 +18,7 @@ type Props = {
 };
 
 export function UserMenuContent({ user }: Props) {
-    const { __ } = lang();
+    const { __ } = useLang();
     const cleanup = useMobileNavigation();
 
     const handleLogout = () => {

@@ -4,6 +4,8 @@ namespace App\Http\Middleware;
 
 use Illuminate\Http\Request;
 use Inertia\Middleware;
+use LaravelLang\Locales\Facades\Locales;
+use LaravelLang\NativeLocaleNames\LocaleNames;
 
 class HandleInertiaRequests extends Middleware
 {
@@ -43,7 +45,28 @@ class HandleInertiaRequests extends Middleware
             ],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
             'lang' => $this->loadLangJson(),
+            'locale' => app()->getLocale(),
+            'localeName' => $this->currentLocaleName(),
+            'locales' => $this->installedLocales(),
         ];
+    }
+
+    private function installedLocales(): array
+    {
+        return Locales::installed()
+            ->mapWithKeys(function ($data) {
+                $names = LocaleNames::get($data->code);
+
+                return [$data->code => $names[$data->code] ?? $data->code];
+            })
+            ->all();
+    }
+
+    private function currentLocaleName(): string
+    {
+        $locale = app()->getLocale();
+
+        return LocaleNames::get($locale)[$locale] ?? $locale;
     }
 
     private function loadLangJson(): array

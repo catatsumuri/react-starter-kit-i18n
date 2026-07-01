@@ -1,5 +1,5 @@
 import { Form, Head, setLayoutProps } from '@inertiajs/react';
-import { lang } from '@erag/lang-sync-inertia/react';
+import { useLang } from '@erag/lang-sync-inertia/react';
 import InputError from '@/components/input-error';
 import PasswordInput from '@/components/password-input';
 import { Button } from '@/components/ui/button';
@@ -15,7 +15,7 @@ type Props = {
 };
 
 export default function ResetPassword({ token, email, passwordRules }: Props) {
-    const { __ } = lang();
+    const { __ } = useLang();
 
     setLayoutProps({
         title: __('Reset password'),

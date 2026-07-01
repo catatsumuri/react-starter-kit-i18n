@@ -1,6 +1,6 @@
 import { KeyRound, Trash2 } from 'lucide-react';
 import { useState } from 'react';
-import { lang } from '@erag/lang-sync-inertia/react';
+import { useLang } from '@erag/lang-sync-inertia/react';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -19,7 +19,7 @@ type Props = {
 };
 
 export default function PasskeyItem({ passkey, onDelete }: Props) {
-    const { __ } = lang();
+    const { __ } = useLang();
     const [isDeleting, setIsDeleting] = useState(false);
 
     const handleDelete = () => {

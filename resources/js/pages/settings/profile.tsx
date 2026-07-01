@@ -2,7 +2,7 @@ import { Form, Head, setLayoutProps, usePage } from '@inertiajs/react';
 /* @chisel-email-verification */
 import { Link } from '@inertiajs/react';
 /* @end-chisel-email-verification */
-import { lang } from '@erag/lang-sync-inertia/react';
+import { useLang } from '@erag/lang-sync-inertia/react';
 import ProfileController from '@/actions/App/Http/Controllers/Settings/ProfileController';
 import DeleteUser from '@/components/delete-user';
 import Heading from '@/components/heading';
@@ -32,7 +32,7 @@ export default function Profile(
     /* @end-chisel-email-verification */
 ) {
     const { auth } = usePage<PageProps>().props;
-    const { __ } = lang();
+    const { __ } = useLang();
 
     setLayoutProps({
         breadcrumbs: [

@@ -1,5 +1,5 @@
 import { Form, Head, setLayoutProps } from '@inertiajs/react';
-import { lang } from '@erag/lang-sync-inertia/react';
+import { useLang } from '@erag/lang-sync-inertia/react';
 import InputError from '@/components/input-error';
 import PasswordInput from '@/components/password-input';
 import { Button } from '@/components/ui/button';
@@ -15,7 +15,7 @@ import PasskeyVerify from '@/components/passkey-verify';
 /* @end-chisel-passkeys */
 
 export default function ConfirmPassword() {
-    const { __ } = lang();
+    const { __ } = useLang();
 
     setLayoutProps({
         title: __('Confirm password'),

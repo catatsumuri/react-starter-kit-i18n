@@ -1,5 +1,5 @@
 import { Link } from '@inertiajs/react';
-import { lang } from '@erag/lang-sync-inertia/react';
+import { useLang } from '@erag/lang-sync-inertia/react';
 import {
     SidebarGroup,
     SidebarGroupLabel,
@@ -12,7 +12,7 @@ import type { NavItem } from '@/types';
 
 export function NavMain({ items = [] }: { items: NavItem[] }) {
     const { isCurrentUrl } = useCurrentUrl();
-    const { __ } = lang();
+    const { __ } = useLang();
 
     return (
         <SidebarGroup className="px-2 py-0">

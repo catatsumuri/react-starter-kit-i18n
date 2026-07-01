@@ -1,6 +1,6 @@
 import { Form } from '@inertiajs/react';
 import { useRef } from 'react';
-import { lang } from '@erag/lang-sync-inertia/react';
+import { useLang } from '@erag/lang-sync-inertia/react';
 import ProfileController from '@/actions/App/Http/Controllers/Settings/ProfileController';
 import Heading from '@/components/heading';
 import InputError from '@/components/input-error';
@@ -18,7 +18,7 @@ import {
 import { Label } from '@/components/ui/label';
 
 export default function DeleteUser() {
-    const { __ } = lang();
+    const { __ } = useLang();
     const passwordInput = useRef<HTMLInputElement>(null);
 
     return (

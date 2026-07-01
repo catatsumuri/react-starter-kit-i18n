@@ -1,10 +1,10 @@
 import { Head, setLayoutProps } from '@inertiajs/react';
-import { lang } from '@erag/lang-sync-inertia/react';
+import { useLang } from '@erag/lang-sync-inertia/react';
 import { PlaceholderPattern } from '@/components/ui/placeholder-pattern';
 import { dashboard } from '@/routes';
 
 export default function Dashboard() {
-    const { __ } = lang();
+    const { __ } = useLang();
 
     setLayoutProps({
         breadcrumbs: [
