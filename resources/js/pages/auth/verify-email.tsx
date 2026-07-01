@@ -1,5 +1,5 @@
-// Components
-import { Form, Head } from '@inertiajs/react';
+import { Form, Head, setLayoutProps } from '@inertiajs/react';
+import { lang } from '@erag/lang-sync-inertia/react';
 import TextLink from '@/components/text-link';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
@@ -7,14 +7,24 @@ import { logout } from '@/routes';
 import { send } from '@/routes/verification';
 
 export default function VerifyEmail({ status }: { status?: string }) {
+    const { __ } = lang();
+
+    setLayoutProps({
+        title: __('Email verification'),
+        description: __(
+            'Please verify your email address by clicking on the link we just emailed to you.',
+        ),
+    });
+
     return (
         <>
-            <Head title="Email verification" />
+            <Head title={__('Email verification')} />
 
             {status === 'verification-link-sent' && (
                 <div className="mb-4 text-center text-sm font-medium text-green-600">
-                    A new verification link has been sent to the email address
-                    you provided during registration.
+                    {__(
+                        'A new verification link has been sent to the email address you provided during registration.',
+                    )}
                 </div>
             )}
 
@@ -23,14 +33,14 @@ export default function VerifyEmail({ status }: { status?: string }) {
                     <>
                         <Button disabled={processing} variant="secondary">
                             {processing && <Spinner />}
-                            Resend verification email
+                            {__('Resend verification email')}
                         </Button>
 
                         <TextLink
                             href={logout()}
                             className="mx-auto block text-sm"
                         >
-                            Log out
+                            {__('Log out')}
                         </TextLink>
                     </>
                 )}
@@ -38,9 +48,3 @@ export default function VerifyEmail({ status }: { status?: string }) {
         </>
     );
 }
-
-VerifyEmail.layout = {
-    title: 'Email verification',
-    description:
-        'Please verify your email address by clicking on the link we just emailed to you.',
-};

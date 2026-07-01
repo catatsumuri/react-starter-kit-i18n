@@ -1,4 +1,5 @@
 import { Link, usePage } from '@inertiajs/react';
+import { lang } from '@erag/lang-sync-inertia/react';
 import { BookOpen, Folder, LayoutGrid, Menu, Search } from 'lucide-react';
 import AppLogo from '@/components/app-logo';
 import AppLogoIcon from '@/components/app-logo-icon';
@@ -68,6 +69,7 @@ export function AppHeader({ breadcrumbs = [] }: Props) {
     const { auth } = page.props;
     const getInitials = useInitials();
     const { isCurrentUrl, whenCurrentUrl } = useCurrentUrl();
+    const { __ } = lang();
 
     return (
         <>
@@ -90,7 +92,7 @@ export function AppHeader({ breadcrumbs = [] }: Props) {
                                 className="flex h-full w-64 flex-col items-stretch justify-between bg-sidebar"
                             >
                                 <SheetTitle className="sr-only">
-                                    Navigation menu
+                                    {__('Navigation menu')}
                                 </SheetTitle>
                                 <SheetHeader className="flex justify-start text-left">
                                     <AppLogoIcon className="h-6 w-6 fill-current text-black dark:text-white" />
@@ -107,7 +109,9 @@ export function AppHeader({ breadcrumbs = [] }: Props) {
                                                     {item.icon && (
                                                         <item.icon className="h-5 w-5" />
                                                     )}
-                                                    <span>{item.title}</span>
+                                                    <span>
+                                                        {__(item.title)}
+                                                    </span>
                                                 </Link>
                                             ))}
                                         </div>
@@ -124,7 +128,9 @@ export function AppHeader({ breadcrumbs = [] }: Props) {
                                                     {item.icon && (
                                                         <item.icon className="h-5 w-5" />
                                                     )}
-                                                    <span>{item.title}</span>
+                                                    <span>
+                                                        {__(item.title)}
+                                                    </span>
                                                 </a>
                                             ))}
                                         </div>
@@ -204,7 +210,7 @@ export function AppHeader({ breadcrumbs = [] }: Props) {
                                             </a>
                                         </TooltipTrigger>
                                         <TooltipContent>
-                                            <p>{item.title}</p>
+                                            <p>{__(item.title)}</p>
                                         </TooltipContent>
                                     </Tooltip>
                                 ))}

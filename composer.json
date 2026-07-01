@@ -10,7 +10,9 @@
     "license": "MIT",
     "require": {
         "php": "^8.3",
+        "erag/laravel-lang-sync-inertia": "^2.2",
         "inertiajs/inertia-laravel": "^3.0",
+        "laravel-lang/common": "^6.8",
         "laravel/chisel": "^0.1.0",
         "laravel/fortify": "^1.37.2",
         "laravel/framework": "^13.17",
@@ -79,9 +81,17 @@
             "Illuminate\\Foundation\\ComposerScripts::postAutoloadDump",
             "@php artisan package:discover --ansi"
         ],
+        "post-install-cmd": [
+            "@patch-vendor"
+        ],
         "post-update-cmd": [
             "@php artisan install:features --ansi",
-            "@php artisan vendor:publish --tag=laravel-assets --ansi --force"
+            "@php artisan vendor:publish --tag=laravel-assets --ansi --force",
+            "@patch-vendor",
+            "@php artisan lang:update --ansi"
+        ],
+        "patch-vendor": [
+            "@php scripts/patch-vendor.php"
         ],
         "post-root-package-install": [
             "@php -r \"file_exists('.env') || copy('.env.example', '.env');\""
