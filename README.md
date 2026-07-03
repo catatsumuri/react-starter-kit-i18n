@@ -37,7 +37,7 @@ To add a new locale (e.g. `ko`):
 ## Installation
 
 ```bash
-composer create-project your-vendor/react-starter-kit-i18n my-app
+laravel new my-app --using=https://github.com/catatsumuri/react-starter-kit-i18n#feature/user-management
 cd my-app
 composer setup
 ```
