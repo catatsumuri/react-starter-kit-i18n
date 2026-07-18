@@ -51,6 +51,9 @@ class HandleInertiaRequests extends Middleware
         ];
     }
 
+    /**
+     * @return array<string, string>
+     */
     private function installedLocales(): array
     {
         return Locales::installed()
