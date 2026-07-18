@@ -141,7 +141,7 @@ class UserController extends Controller
             'id' => $user->id,
             'name' => $user->name,
             'email' => $user->email,
-            'roles' => $user->roles->pluck('name')->values()->all(),
+            'roles' => array_values(array_map(fn ($name) => (string) $name, $user->roles->pluck('name')->all())),
             'is_admin' => $user->hasRole('admin'),
             'can_delete' => auth()->id() !== $user->id,
             'created_at' => $user->created_at?->toISOString(),
