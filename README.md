@@ -37,7 +37,7 @@ To add a new locale (e.g. `ko`):
 ## Installation
 
 ```bash
-composer create-project your-vendor/react-starter-kit-i18n my-app
+composer create-project catatsumuri/react-starter-kit-i18n my-app
 cd my-app
 composer setup
 ```
