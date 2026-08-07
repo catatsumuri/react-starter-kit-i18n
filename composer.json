@@ -2,10 +2,14 @@
     "$schema": "https://getcomposer.org/schema.json",
     "name": "catatsumuri/react-starter-kit-i18n",
     "type": "project",
-    "description": "The skeleton application for the Laravel framework.",
+    "description": "A fork of the official Laravel + React starter kit with built-in internationalization (i18n) support.",
     "keywords": [
         "laravel",
-        "framework"
+        "framework",
+        "react",
+        "inertia",
+        "i18n",
+        "localization"
     ],
     "license": "MIT",
     "require": {
