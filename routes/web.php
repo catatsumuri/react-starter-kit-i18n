@@ -1,9 +1,11 @@
 <?php
 
+use App\Http\Controllers\AnalyzeSurveyController;
 use App\Http\Controllers\PlaygroundController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', PlaygroundController::class)->name('home');
+Route::post('/analyze', AnalyzeSurveyController::class)->name('survey.analyze');
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::inertia('dashboard', 'dashboard')->name('dashboard');
