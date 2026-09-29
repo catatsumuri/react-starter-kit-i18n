@@ -8,7 +8,7 @@ import SettingsLayout from '@/layouts/settings/layout';
 
 const appTitle = import.meta.env.VITE_APP_TITLE || 'Laravel';
 
-createInertiaApp({
+void createInertiaApp({
     title: (title) => (title ? `${title} - ${appTitle}` : appTitle),
     layout: (name) => {
         switch (true) {

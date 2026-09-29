@@ -11,7 +11,7 @@ import { useCurrentUrl } from '@/hooks/use-current-url';
 import type { NavItem } from '@/types';
 
 export function NavMain({
-    items = [],
+    items,
     label = 'Platform',
 }: {
     items: NavItem[];
