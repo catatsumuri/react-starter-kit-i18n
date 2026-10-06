@@ -7,15 +7,23 @@ namespace App\Providers;
 use App\Actions\Fortify\CreateNewUser;
 /* @end-chisel-registration */
 use App\Actions\Fortify\ResetUserPassword;
+use App\Models\User;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
+use Illuminate\Support\Timebox;
 use Illuminate\Validation\Rules\Password;
 use Inertia\Inertia;
+use Laravel\Fortify\Contracts\LoginResponse as LoginResponseContract;
+use Laravel\Fortify\Contracts\TwoFactorLoginResponse as TwoFactorLoginResponseContract;
 use Laravel\Fortify\Features;
 use Laravel\Fortify\Fortify;
+use Laravel\Fortify\Http\Responses\LoginResponse;
+use Laravel\Fortify\Http\Responses\TwoFactorLoginResponse;
+use Symfony\Component\HttpFoundation\Response;
 
 class FortifyServiceProvider extends ServiceProvider
 {
@@ -24,7 +32,33 @@ class FortifyServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->singleton(LoginResponseContract::class, fn () => new class extends LoginResponse
+        {
+            public function toResponse($request): Response
+            {
+                if (! $request->wantsJson() && $request->user()->hasRole('admin')) {
+                    $request->session()->forget('url.intended');
+
+                    return redirect()->route('admin.dashboard');
+                }
+
+                return parent::toResponse($request);
+            }
+        });
+
+        $this->app->singleton(TwoFactorLoginResponseContract::class, fn () => new class extends TwoFactorLoginResponse
+        {
+            public function toResponse($request): Response
+            {
+                if (! $request->wantsJson() && $request->user()->hasRole('admin')) {
+                    $request->session()->forget('url.intended');
+
+                    return redirect()->route('admin.dashboard');
+                }
+
+                return parent::toResponse($request);
+            }
+        });
     }
 
     /**
@@ -42,6 +76,33 @@ class FortifyServiceProvider extends ServiceProvider
      */
     private function configureActions(): void
     {
+        Fortify::authenticateUsing(function (Request $request): ?User {
+            return (new Timebox)->call(function (Timebox $timebox) use ($request): ?User {
+                $identifier = Str::lower($request->string(Fortify::username())->toString());
+                $column = filter_var($identifier, FILTER_VALIDATE_EMAIL) !== false ? 'email' : 'username';
+                $users = User::query()->whereRaw('LOWER('.$column.') = ?', [$identifier])->limit(2)->get();
+
+                if ($users->count() !== 1) {
+                    return null;
+                }
+
+                $user = $users->first();
+                $password = $request->string('password')->toString();
+
+                if (! Hash::check($password, $user->password)) {
+                    return null;
+                }
+
+                if (config('hashing.rehash_on_login', true) && Hash::needsRehash($user->password)) {
+                    $user->forceFill(['password' => Hash::make($password)])->save();
+                }
+
+                $timebox->returnEarly();
+
+                return $user;
+            }, 200000);
+        });
+
         Fortify::resetUserPasswordsUsing(ResetUserPassword::class);
         /* @chisel-registration */
         Fortify::createUsersUsing(CreateNewUser::class);
