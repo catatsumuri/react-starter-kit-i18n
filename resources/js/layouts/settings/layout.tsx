@@ -9,6 +9,7 @@ import { cn, toUrl } from '@/lib/utils';
 import { edit as editAppearance } from '@/routes/appearance';
 import { edit } from '@/routes/profile';
 import { edit as editSecurity } from '@/routes/security';
+import { index as sessionsIndex } from '@/routes/sessions';
 import type { NavItem } from '@/types';
 
 const sidebarNavItems: NavItem[] = [
@@ -20,6 +21,11 @@ const sidebarNavItems: NavItem[] = [
     {
         title: 'Security',
         href: editSecurity(),
+        icon: null,
+    },
+    {
+        title: 'Sessions',
+        href: sessionsIndex(),
         icon: null,
     },
     {
