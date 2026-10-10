@@ -1,0 +1,70 @@
+# 認証・セッションの現状調査
+
+調査日: 2026-10-10
+
+対象バージョン:
+
+- PHP 8.4
+- Laravel Framework 13.34.0
+- Laravel Fortify 1.40.0
+- Laravel Passkeys 0.2.1
+
+## 認証経路
+
+| 経路 | 成功時 | 失敗時 | レート制限 |
+| --- | --- | --- | --- |
+| メールアドレス／ユーザー名 + パスワード | Login。セッション ID を再生成 | Failed。認証せず入力エラー | 正規化したログイン文字列 + IP ごとに毎分 5 回。上限到達時の認証イベントはない |
+| パスワード後の TOTP | ValidTwoFactorAuthenticationCodeProvided、続いて Login。セッション ID を再生成 | TwoFactorAuthenticationFailed。認証しない | チャレンジ対象ユーザー ID ごとに毎分 5 回 |
+| パスワード後のリカバリーコード | 使用済みコードを交換後、TOTP 成功時と同じイベント | TwoFactorAuthenticationFailed。認証しない | TOTP と共通 |
+| パスキー | PasskeyVerified、続いて Login。セッション ID を再生成 | WebAuthn 検証例外。専用の失敗イベントはない | credential ID（なければセッション ID）+ IP ごとに毎分 10 回 |
+| パスワードリセット | PasswordResetLinkSent、リセット完了時に PasswordReset | バリデーションエラー。成功イベントは発火しない | Fortify 標準ルートの guest ミドルウェア |
+| メール確認 | 初回確認時に Verified | 無効な署名、ユーザー ID、メールハッシュでは発火しない | 確認メール再送は毎分 6 回 |
+
+パスワードが正しく 2FA が有効な場合は、TwoFactorAuthenticationChallenged が発火します。この時点では Login は発火せず、ユーザーも未認証です。したがって、監査上のログイン成功として扱ってはいけません。
+
+ログインのスロットル上限到達時は、ルートの名前付き throttle ミドルウェアが Fortify の認証パイプラインより先に応答します。そのため、現在の構成では Lockout、Failed、Login のいずれも発火しません。Laravel の Lockout を監査境界にするには、レート制限の実装またはイベント発火を明示的に変更する必要があります。
+
+## セキュリティ設定のイベント
+
+- 2FA: TwoFactorAuthenticationEnabled、TwoFactorAuthenticationConfirmed、TwoFactorAuthenticationDisabled
+- リカバリーコード: RecoveryCodesGenerated、使用時の RecoveryCodeReplaced
+- パスキー: PasskeyRegistered、認証時の PasskeyVerified、PasskeyDeleted
+- 設定画面からのパスワード変更: PasswordUpdatedViaController
+- ログアウト: Laravel の Logout
+
+## セッションのライフサイクルと対応方針
+
+アプリケーションのデフォルトは database ドライバー、アイドル有効期間は 120 分です。ただし、どちらも環境変数で変更できます。テスト環境は array ドライバーです。
+
+Phase 1 のセッション一覧と個別失効は、初期実装では database ドライバーだけを対応対象とします。sessions テーブルの所有者を user_id で制限し、現在のセッション ID を画面やログへそのまま公開しません。その他のドライバーでは、一覧や個別失効が可能であると装わず、機能を利用不可として明示します。
+
+セッション行の削除は、そのセッションを使用する次回以降のリクエストを無効にします。すでに処理中のリクエストは停止しません。また、同じ Cookie のコピーは同一セッションなので、一覧だけではコピー元とコピー先を区別できません。
+
+## 特権操作と一括エクスポート
+
+現時点のアプリケーションには管理者ロール、一括エクスポート、業務データに対する特権操作はありません。セキュリティ上重要な既存操作は、パスワード変更、メールアドレス変更、アカウント削除、2FA とパスキーの登録／削除です。
+
+## テストマトリクス
+
+| 対象 | 成功 | 失敗 | スロットル | イベント境界 |
+| --- | --- | --- | --- | --- |
+| メールアドレス／ユーザー名 + パスワード | 既存テストあり | 既存テストあり | 既存テストあり | AuthenticationEventTest |
+| TOTP／リカバリーコード | リカバリーコードで確認 | 無効なリカバリーコードで確認 | ルート設定あり、専用回帰テストなし | AuthenticationEventTest |
+| パスキー | パッケージの暗号検証に依存 | パッケージの暗号検証に依存 | ルート設定あり、専用回帰テストなし | パッケージ実装を確認 |
+| パスワードリセット | 既存テストあり | 既存テストあり | 専用回帰テストなし | Laravel／Fortify 実装を確認 |
+| メール確認 | 既存テストあり | 既存テストあり | 専用回帰テストなし | 既存テストあり |
+| セッション失効 | Phase 1 で実装 | Phase 1 で実装 | Phase 1 で実装 | Phase 1 で実装 |
+
+パスキーの完全な HTTP 統合テストには、有効な WebAuthn credential と署名の生成が必要です。ここでは成功を偽装せず、Laravel Passkeys が VerifyPasskey 内で PasskeyVerified を発火し、その後 Stateful Guard の login が Login を発火する境界を確認しています。アプリケーション固有のパスキー統合テストは未解決事項です。
+
+## ログの保持とアクセス
+
+監査ストアは未実装です。Phase 2 の設計時に、次をデプロイ先ごとに決定する必要があります。
+
+- 保持期間と削除方法
+- 閲覧できる主体とアクセス監査
+- 外部ログへの転送先
+- 個人情報の最小化方針
+- 攻撃時の大量失敗イベントに対する集約またはサンプリング
+
+パスワード、TOTP シークレット、リカバリーコード、セッション Cookie、完全なセッション ID、WebAuthn アサーションは記録対象にしません。
