@@ -1,119 +1,120 @@
-# Security Hardening Roadmap
+# セキュリティ強化ロードマップ
 
-Status: proposal / not implemented
-Scope: `catatsumuri/react-starter-kit-i18n`, branch `feature/login-with-email-or-username`
-Updated: 2026-10-10
+ステータス: 提案段階 / 未実装
+対象: `catatsumuri/react-starter-kit-i18n`、ブランチ `feature/login-with-email-or-username`
+更新日: 2026-10-10
 
-## Purpose and current assessment
+## 目的と現状評価
 
-The starter kit already offers Laravel Fortify password authentication, email-or-username login, optional TOTP 2FA/recovery codes, and passkey support. It also has a rate limiter for login, 2FA, and passkeys. This is a capable authentication *entry point*, but it does not establish security observability, user-facing session control, incident response, or a system-wide security operations workflow.
+このスターターキットは、Laravel Fortify によるパスワード認証、メールアドレスまたはユーザー名によるログイン、任意の TOTP 2FA／リカバリーコード、およびパスキーをすでに提供しています。また、ログイン、2FA、パスキーに対するレートリミッターも備えています。これは認証の「入口」としては十分な機能を持ちますが、セキュリティの可観測性、ユーザー自身によるセッション管理、インシデント対応、システム全体のセキュリティ運用ワークフローまでは確立していません。
 
-Do not infer from a stolen session that passwords or MFA were broken. A stolen bearer session cookie may be replayed without a fresh Login/2FA/passkey event. Likewise a copied cookie can appear as the **same session**, rather than as a new device. Session listing and audit logging are useful but cannot reliably identify every hijack.
+セッションが盗まれたからといって、パスワードや MFA が破られたと推測してはいけません。盗まれた Bearer セッション Cookie は、新たなログイン／2FA／パスキーイベントを発生させずに再利用される可能性があります。同様に、コピーされた Cookie は新しいデバイスではなく、**同じセッション**として見える場合があります。セッション一覧と監査ログは有用ですが、すべての乗っ取りを確実に特定できるわけではありません。
 
-Verified repository anchors (as of the specified branch):
-- `config/fortify.php`: optional 2FA and passkeys, rate limiters; `username` config remains `email` while the handler supports both identifiers.
-- `app/Providers/FortifyServiceProvider.php`: custom `authenticateUsing`, per-login-string+IP login limiter.
-- `config/session.php`: defaults to `database` driver with 120-minute idle lifetime, but runtime env may override.
-- `database/migrations/0001_01_01_000000_create_users_table.php`: `sessions` table has `id`, `user_id`, `ip_address`, `user_agent`, `payload`, `last_activity`.
-- `routes/settings.php`: no dedicated session-list/revoke routes.
-- `tests/Feature/Auth/AuthenticationTest.php`: tests for email/username login, rate limiting, and 2FA challenge redirect.
+確認済みのリポジトリ上の根拠（指定ブランチ時点）:
 
-## Principles
+- `config/fortify.php`: 任意の 2FA とパスキー、およびレートリミッター。ハンドラーは両方の識別子に対応していますが、`username` 設定は引き続き `email` です。
+- `app/Providers/FortifyServiceProvider.php`: カスタム `authenticateUsing`、ログイン文字列と IP の組み合わせごとのログインレートリミッター。
+- `config/session.php`: デフォルトは `database` ドライバーで、アイドル有効期間は 120 分。ただし、実行環境の環境変数で上書きされる可能性があります。
+- `database/migrations/0001_01_01_000000_create_users_table.php`: `sessions` テーブルには `id`、`user_id`、`ip_address`、`user_agent`、`payload`、`last_activity` があります。
+- `routes/settings.php`: セッション一覧／失効専用のルートはありません。
+- `tests/Feature/Auth/AuthenticationTest.php`: メールアドレス／ユーザー名によるログイン、レート制限、2FA チャレンジへのリダイレクトに関するテストがあります。
 
-1. **No new super-admin by default.** Prefer operator CLI and external alerting, then add narrowly scoped RBAC/admin UI only with a demonstrated need.
-2. **Separate evidence, detection, and response.** Audit records explain what happened; counters detect anomalous activity; revocation/step-up constrain impact.
-3. **Don't store secrets in audit logs.** Never log passwords, recovery codes, TOTP secrets, full session IDs, session cookies, reset tokens, WebAuthn assertions, or sensitive request bodies.
-4. **Avoid user enumeration and lockout-as-DoS.** An attacker can intentionally trigger failures for a victim.
-5. **Secure by default, configurable by deployment.** Do not assume production uses the database session driver.
-6. **Each phase must have automated tests and documentation.** No silent changes to authentication behavior.
-7. **Logs within the compromised application DB can be altered.** External durable logging is a separate defense layer.
+## 原則
 
-## Phase 0 — Inventory, threat model, tests (first)
+1. **デフォルトでは新たなスーパー管理者を設けない。** まず運用者向け CLI と外部通知を優先し、必要性が実証された場合にのみ、範囲を限定した RBAC／管理 UI を追加します。
+2. **証跡、検知、対応を分離する。** 監査記録は何が起きたかを説明し、カウンターは異常な活動を検知し、失効／ステップアップ認証は影響を抑えます。
+3. **監査ログに秘密情報を保存しない。** パスワード、リカバリーコード、TOTP シークレット、完全なセッション ID、セッション Cookie、リセットトークン、WebAuthn アサーション、機密性の高いリクエスト本文は決して記録しません。
+4. **ユーザー列挙とロックアウトを利用した DoS を避ける。** 攻撃者は被害者に対する失敗を意図的に発生させられます。
+5. **デフォルトで安全にしつつ、デプロイ環境ごとに設定可能にする。** 本番環境がデータベースセッションドライバーを使用していると決めつけません。
+6. **各フェーズに自動テストとドキュメントを用意する。** 認証動作を暗黙的に変更しません。
+7. **侵害されたアプリケーション DB 内のログは改ざんされ得る。** 外部への永続的なログ保存は別の防御層です。
 
-- [ ] Document Fortify password, username/email, passkey, TOTP, recovery-code, password-reset, verification, and session lifecycles.
-- [ ] Verify exactly which framework events fire on password success/failure, lockout, TOTP success/failure, passkey success/failure, and session revocation. Do not assume each path emits `Login`.
-- [ ] Verify supported session drivers in production and tests; explicitly scope initial session UI to `database` unless an adapter is built.
-- [ ] Identify whether applications have privileged operations or bulk exports that require separate auditing.
-- [ ] Record current baseline tests and determine production log retention/access requirements.
+## フェーズ 0 — インベントリ、脅威モデル、テスト（最初に実施）
 
-**Exit criteria:** executable integration-test matrix for every auth path and a documented session driver support policy.
+- [ ] Fortify のパスワード、ユーザー名／メールアドレス、パスキー、TOTP、リカバリーコード、パスワードリセット、確認、セッションの各ライフサイクルを文書化する。
+- [ ] パスワード認証の成功／失敗、ロックアウト、TOTP の成功／失敗、パスキーの成功／失敗、セッション失効時に、どのフレームワークイベントが発火するかを正確に確認する。すべての経路で `Login` が発火すると決めつけない。
+- [ ] 本番環境とテストでサポートするセッションドライバーを確認する。アダプターを構築しない限り、初期のセッション UI の対象を `database` に明示的に限定する。
+- [ ] アプリケーションに、個別の監査を必要とする特権操作や一括エクスポートがあるか特定する。
+- [ ] 現在のベースラインテストを記録し、本番ログの保持要件とアクセス要件を決定する。
 
-## Phase 1 — User-controlled sessions (first user-facing feature)
+**完了条件:** すべての認証経路を対象とする実行可能な統合テストマトリクスと、文書化されたセッションドライバーのサポート方針。
 
-Goal: give users a way to review and revoke sessions even before advanced anomaly detection exists.
+## フェーズ 1 — ユーザーによるセッション管理（最初のユーザー向け機能）
 
-- [ ] Add a settings screen for current and other authenticated sessions, populated only from the signed-in user's records.
-- [ ] Show browser/device description derived from User-Agent, approximate IP, last activity timestamp, and a clearly marked *current session*. Labels like "device" are estimates, not trusted device identity.
-- [ ] Implement revoke-one-other-session and revoke-all-other-sessions; consider revoke-all-including-current as a distinct confirmed action.
-- [ ] Authorization must restrict every delete to `user_id = auth()->id()`; do not accept or expose raw reusable session secrets in UI or logs. Prefer opaque UI identifiers or carefully scoped signed actions.
-- [ ] Require fresh authentication for destructive session controls; account for passkey-only accounts (do not make password confirmation the sole possible route).
-- [ ] Deleting a DB session should prevent future requests using it; test that explicitly. Do not imply immediate interruption of already-running requests.
-- [ ] Handle expired/stale session rows, pagination/limits, inaccessible storage, and non-database drivers safely.
-- [ ] Document that a stolen *copy* of an existing cookie may share the same listed session; revoking that session logs out both holders.
+目的: 高度な異常検知がなくても、ユーザーがセッションを確認し、失効できるようにします。
 
-**Exit criteria:** owner-only session list; effective individual and bulk revocation; proper self-session behavior; feature tests for IDOR, current vs other session, hijacked-copy scenario, expiry, and rate limiting of revoke endpoints.
+- [ ] ログイン中のユーザー自身のレコードのみから構成される、現在およびその他の認証済みセッションの設定画面を追加する。
+- [ ] User-Agent から推定したブラウザー／デバイスの説明、おおよその IP、最終アクティビティ日時、明確に示された「現在のセッション」を表示する。「デバイス」などのラベルは推定にすぎず、信頼できるデバイス識別情報ではない。
+- [ ] 他のセッションを 1 件失効する機能と、他のすべてのセッションを失効する機能を実装する。現在のセッションを含むすべての失効は、確認を要する別個の操作として検討する。
+- [ ] すべての削除を `user_id = auth()->id()` に制限する認可を必須とする。再利用可能な生のセッション秘密情報を UI やログに公開しない。不透明な UI 識別子、または適切にスコープを限定した署名付きアクションを優先する。
+- [ ] 破壊的なセッション操作には直近の再認証を要求する。パスキーのみのアカウントも考慮し、パスワード確認だけを唯一の手段にしない。
+- [ ] DB セッションを削除した場合、そのセッションを使用する以後のリクエストが拒否されることを明示的にテストする。すでに実行中のリクエストが即座に中断されるとは示唆しない。
+- [ ] 期限切れ／古いセッション行、ページネーション／件数制限、アクセス不能なストレージ、データベース以外のドライバーを安全に扱う。
+- [ ] 盗まれた既存 Cookie の「コピー」は、一覧上で同じセッションを共有する可能性があり、そのセッションを失効すると両方の保持者がログアウトされることを文書化する。
 
-## Phase 2 — Audit events and reviewable history
+**完了条件:** 所有者だけが閲覧できるセッション一覧、個別および一括失効の有効性、現在のセッションの適切な扱い、IDOR、現在とその他のセッション、乗っ取られた Cookie のコピー、期限切れ、失効エンドポイントのレート制限に関する機能テスト。
 
-Use Laravel Events/listeners as the event boundary. Evaluate **Spatie laravel-activitylog** as the leading option for persisted application audit events and selected Eloquent change histories, but don't couple security semantics to the package. Compare it with a small custom event store or a dedicated Monolog channel before deciding.
+## フェーズ 2 — 監査イベントと確認可能な履歴
 
-- [ ] Define a stable schema: event name, outcome, occurred_at, actor_user_id (nullable), target_user_id (nullable), correlation/request ID, session fingerprint/reference (non-reusable), client IP, sanitized UA, auth method, and limited safe metadata.
-- [ ] Record login success/failure, throttling/lockout, 2FA/recovery usage, passkey registration/removal, password/email changes, session revocation, privilege changes, and bulk exports *when the application supports them*.
-- [ ] Confirm actual event emission and avoid treating a password check followed by a 2FA challenge as a completed login.
-- [ ] Avoid hashing low-entropy usernames as a purported privacy fix; choose retention, minimization, restricted visibility, and keyed/HMAC identifiers if needed.
-- [ ] Provide a minimal user-facing view of recent successful authentication and security-critical changes. Displaying *all failed attempts* is optional and may confuse users.
-- [ ] Create retention/pruning policy and authorization rules for access to audit data.
-- [ ] Do not write every high-volume unauthenticated failure synchronously to the primary DB during an attack; evaluate sampling/aggregation/external logging.
+イベント境界として Laravel の Events／リスナーを使用します。永続的なアプリケーション監査イベントと、選択した Eloquent の変更履歴には **Spatie laravel-activitylog** を第一候補として評価しますが、セキュリティ上の意味論をパッケージに結び付けないようにします。決定前に、小規模な独自イベントストアまたは専用 Monolog チャンネルと比較します。
 
-**Exit criteria:** end-to-end audit coverage tests without leaked credentials or excessive write amplification; records can answer "who/when/how" for supported operations.
+- [ ] 安定したスキーマを定義する: イベント名、結果、`occurred_at`、`actor_user_id`（null 可）、`target_user_id`（null 可）、相関／リクエスト ID、セッションフィンガープリント／参照（再利用不可）、クライアント IP、サニタイズ済み UA、認証方式、限定された安全なメタデータ。
+- [ ] ログインの成功／失敗、スロットリング／ロックアウト、2FA／リカバリーコードの使用、パスキーの登録／削除、パスワード／メールアドレスの変更、セッション失効、権限変更、一括エクスポートを、*アプリケーションが対応している場合に*記録する。
+- [ ] 実際のイベント発火を確認し、パスワード確認後に 2FA チャレンジへ進んだだけの状態をログイン完了として扱わない。
+- [ ] エントロピーの低いユーザー名を、見せかけのプライバシー対策としてハッシュ化しない。必要に応じて、保持期間、最小化、可視性の制限、鍵付き／HMAC 識別子を選択する。
+- [ ] 最近成功した認証とセキュリティ上重要な変更について、ユーザー向けの最小限の表示を提供する。*すべての失敗した試行*の表示は任意であり、ユーザーを混乱させる可能性がある。
+- [ ] 監査データの保持／削除方針とアクセス認可ルールを策定する。
+- [ ] 攻撃中に、大量の未認証の失敗をすべて同期的にプライマリ DB へ書き込まない。サンプリング／集約／外部ログを評価する。
 
-## Phase 3 — Detection and notification
+**完了条件:** 認証情報の漏えいや過剰な書き込み増幅を起こさないエンドツーエンドの監査カバレッジテスト。サポート対象の操作について、記録から「誰が／いつ／どのように」を確認できること。
 
-- [ ] Aggregate short-window events (e.g. Redis), including per IP, per account, and across accounts; normalize username/email variants to a canonical account where safely possible.
-- [ ] Alert operators via deployment-configured external channels (e.g. email/Slack/CloudWatch) on unusual spikes, distributed attempts, or suspicious security-setting changes.
-- [ ] Notify account owners of consequential events such as passkey/2FA removal, password change, session revocation, and risk-significant new authentication.
-- [ ] Add rate limits/deduplication to notifications; do not put full IP/session identifiers in external messages unnecessarily.
-- [ ] Treat changes in IP, geolocation, or User-Agent as weak signals, not proof or automatic global lockout.
-- [ ] Test failure of Redis, email, and external notification services without blocking normal login unnecessarily.
+## フェーズ 3 — 検知と通知
 
-**Exit criteria:** reproducible synthetic alert scenarios, bounded DB writes, no alert flood, documented operator runbook.
+- [ ] 短時間枠のイベントを集約する（例: Redis）。IP ごと、アカウントごと、複数アカウント横断を含め、安全に行える場合はユーザー名／メールアドレスの表記差を正規のアカウントへ正規化する。
+- [ ] 異常な急増、分散した試行、不審なセキュリティ設定変更について、デプロイ環境で設定した外部チャンネル（例: メール／Slack／CloudWatch）を通じて運用者に通知する。
+- [ ] パスキー／2FA の削除、パスワード変更、セッション失効、リスク上重要な新規認証など、重大なイベントをアカウント所有者に通知する。
+- [ ] 通知にレート制限／重複排除を追加する。外部メッセージに完全な IP／セッション識別子を不必要に含めない。
+- [ ] IP、位置情報、User-Agent の変化は弱いシグナルとして扱い、証拠または自動的な全体ロックアウトの根拠とはしない。
+- [ ] 通常のログインを不必要に妨げることなく、Redis、メール、外部通知サービスの障害をテストする。
 
-## Phase 4 — Containment and high-risk operations
+**完了条件:** 再現可能な疑似アラートシナリオ、上限が管理された DB 書き込み、アラートの大量発生がないこと、文書化された運用者向けランブック。
 
-- [ ] Provide a CLI/runbook to revoke sessions by user or cohort, temporarily disable an account if required, and inspect recent audit entries—without first creating a web super-admin.
-- [ ] Require fresh user verification for high-impact changes and exports. Prefer strong step-up methods supported by account enrollment; re-auth must be server enforced, fresh, and action-scoped.
-- [ ] Consider idle and absolute session lifetimes and revocation on critical credential/security changes; document UX costs.
-- [ ] Evaluate logging/limits for bulk reads and exports at application level. Auth audit alone cannot prove what records were exfiltrated.
-- [ ] Provide response instructions for an infostealer infection: clean/rebuild device first, then revoke sessions and rotate exposed credentials and keys.
+## フェーズ 4 — 封じ込めと高リスク操作
 
-**Exit criteria:** tested incident drill from suspected takeover to containment; proof that sensitive actions remain constrained under a stolen-but-valid cookie where feasible.
+- [ ] Web のスーパー管理者を先に作ることなく、ユーザーまたはコホート単位でのセッション失効、必要に応じたアカウントの一時無効化、最近の監査エントリの確認を行う CLI／ランブックを提供する。
+- [ ] 影響の大きい変更とエクスポートには、直近のユーザー確認を要求する。アカウントに登録済みの強力なステップアップ方式を優先する。再認証はサーバー側で強制し、有効期間が短く、対象アクションに限定する。
+- [ ] アイドルおよび絶対セッション有効期間と、重要な認証情報／セキュリティ設定変更時の失効を検討し、UX 上のコストを文書化する。
+- [ ] アプリケーションレベルの一括読み取りとエクスポートに対するログ記録／制限を評価する。認証監査だけでは、どのレコードが流出したかを証明できない。
+- [ ] 情報窃取マルウェア感染時の対応手順を提供する。最初にデバイスを駆除／再構築し、その後セッションを失効させ、露出した認証情報と鍵をローテーションする。
 
-## Phase 5 — Optional operator interface and durable logs
+**完了条件:** 乗っ取りの疑いから封じ込めまでのインシデント訓練がテスト済みであること。実現可能な範囲で、盗まれた有効な Cookie がある状況でも機密性の高い操作が引き続き制約されることの証明。
 
-- [ ] Add an operator UI only if real operational needs justify it; adopt least-privilege roles, separation of duties, step-up auth, and complete audit of operator actions.
-- [ ] Export audit/security events to an independently controlled service with restricted write/delete permissions (e.g. CloudWatch Logs plus suitable retention/access controls).
-- [ ] Define observable metrics, alert ownership, escalation, data retention, cost budget, and privacy disclosures.
-- [ ] Periodically test session revocation and log export under simulated attack conditions.
+## フェーズ 5 — 任意の運用者インターフェースと永続ログ
 
-## Package decision: Spatie Activitylog
+- [ ] 実際の運用上の必要性がある場合にのみ運用者 UI を追加する。最小権限のロール、職務分離、ステップアップ認証、運用者操作の完全な監査を採用する。
+- [ ] 監査／セキュリティイベントを、書き込み／削除権限が制限された独立管理サービスへエクスポートする（例: CloudWatch Logs と適切な保持／アクセス制御）。
+- [ ] 観測可能なメトリクス、アラートの担当者、エスカレーション、データ保持、コスト予算、プライバシーに関する開示を定義する。
+- [ ] 模擬攻撃条件下で、セッション失効とログエクスポートを定期的にテストする。
 
-**Provisional decision:** suitable as an in-app persistent activity/audit log, particularly if the app wants Eloquent change tracking in addition to authentication events. **Not** a session manager, intrusion detector, immutable security log, or full incident-response product. Don't adopt it just to store massive unauthenticated failure streams. Re-evaluate after the Phase 0 event-volume and retention inventory.
+## パッケージの判断: Spatie Activitylog
 
-## Non-goals and hazards
+**暫定判断:** アプリケーション内の永続的なアクティビティ／監査ログとして適しています。特に、認証イベントに加えて Eloquent の変更追跡も必要な場合に有用です。セッションマネージャー、侵入検知器、改ざん不能なセキュリティログ、完全なインシデント対応製品では**ありません**。大量の未認証失敗ストリームを保存するためだけに導入してはいけません。フェーズ 0 でイベント量と保持要件を洗い出した後、再評価します。
 
-- No claim that MFA/passkeys prevent replay of an already stolen session cookie.
-- No claim that session listings reveal every stolen/copied cookie.
-- No device fingerprint presented as definitive identity.
-- No automatic universal account lock after N failures (can be weaponized for denial of service).
-- No silent requirement that every account have a password, since passkey-only support may exist in future.
-- No blanket logging of model attributes, session payloads, personal information, or secret material.
-- No requirement that an admin dashboard ship before audit, self-service revocation, and response tooling.
+## 対象外と注意事項
 
-## Handoff instructions for a development agent
+- MFA／パスキーが、すでに盗まれたセッション Cookie の再利用を防ぐとは主張しない。
+- セッション一覧によって、盗まれた／コピーされたすべての Cookie が判明するとは主張しない。
+- デバイスフィンガープリントを確定的な本人識別情報として提示しない。
+- N 回の失敗後に一律でアカウントを自動ロックしない（サービス拒否攻撃に悪用され得る）。
+- 将来的にパスキーのみの対応があり得るため、すべてのアカウントにパスワードがあることを暗黙の必須条件としない。
+- モデル属性、セッションペイロード、個人情報、秘密情報を一律に記録しない。
+- 監査、セルフサービスでの失効、対応ツールより先に管理ダッシュボードをリリースすることを必須としない。
 
-1. Inspect the current branch; do **not** assume paths/features are unchanged.
-2. Start with Phase 0 and Phase 1; propose a minimal diff before implementing later phases.
-3. Prefer framework-native auth/session APIs and test them; use raw DB access only where necessary and after driver checks.
-4. Add focused Pest/PHPUnit feature tests for privilege boundaries and actual invalidation behavior.
-5. Keep each phase in a separate reviewable PR/commit; do not combine admin roles, risk scoring, and session management in one patch.
-6. Report unresolved assumptions explicitly, especially passkey-only step-up and session store portability.
+## 開発担当エージェントへの引き継ぎ手順
+
+1. 現在のブランチを確認する。パス／機能が変わっていないと**決めつけない**。
+2. フェーズ 0 とフェーズ 1 から着手し、後続フェーズを実装する前に最小限の差分を提案する。
+3. フレームワーク標準の認証／セッション API を優先してテストする。生の DB アクセスは、必要な場合に限り、ドライバーを確認した後で使用する。
+4. 権限境界と実際の無効化動作について、焦点を絞った Pest／PHPUnit 機能テストを追加する。
+5. 各フェーズを個別にレビュー可能な PR／コミットに分ける。管理者ロール、リスクスコアリング、セッション管理を 1 つのパッチにまとめない。
+6. 未解決の前提、特にパスキーのみのステップアップ認証とセッションストアの移植性について明示的に報告する。
