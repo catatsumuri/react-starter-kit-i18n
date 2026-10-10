@@ -43,8 +43,15 @@ export function useCurrentUrl(): UseCurrentUrlReturn {
         const urlToCompare = currentUrl ?? currentUrlPath;
         const urlString = toUrl(urlToCheck);
 
-        const comparePath = (path: string): boolean =>
-            startsWith ? urlToCompare.startsWith(path) : path === urlToCompare;
+        const comparePath = (path: string): boolean => {
+            if (!startsWith) {
+                return path === urlToCompare;
+            }
+
+            const parentPath = path.endsWith('/') ? path : `${path}/`;
+
+            return path === urlToCompare || urlToCompare.startsWith(parentPath);
+        };
 
         if (!urlString.startsWith('http')) {
             return comparePath(urlString);

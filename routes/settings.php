@@ -1,8 +1,10 @@
 <?php
 
 use App\Http\Controllers\Settings\ProfileController;
+use App\Http\Controllers\Settings\SecurityActivityController;
 use App\Http\Controllers\Settings\SecurityController;
 use App\Http\Controllers\Settings\SessionController;
+use App\Http\Middleware\AuditAuthenticationFailures;
 /* @chisel-password-confirmation */
 use Illuminate\Auth\Middleware\RequirePassword;
 /* @end-chisel-password-confirmation */
@@ -27,7 +29,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('settings/sessions', [SessionController::class, 'index'])
         ->name('sessions.index');
 
+    Route::get('settings/security-activity', SecurityActivityController::class)
+        ->name('security-activity.index');
+
     Route::middleware([
+        AuditAuthenticationFailures::class,
         RequirePassword::using(passwordTimeoutSeconds: 900),
         'throttle:session-revocation',
     ])->group(function () {

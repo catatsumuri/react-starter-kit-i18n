@@ -3,6 +3,7 @@
 namespace App\Actions\Sessions;
 
 use App\Models\User;
+use App\Support\ClientDescriptor;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Support\Carbon;
@@ -11,6 +12,8 @@ use stdClass;
 
 class ManageDatabaseSessions
 {
+    public function __construct(private ClientDescriptor $clients) {}
+
     public function isAvailable(): bool
     {
         return config('session.driver') === 'database';
@@ -115,13 +118,13 @@ class ManageDatabaseSessions
      */
     private function present(User $user, stdClass $session, bool $isCurrent): array
     {
-        $device = $this->describeUserAgent($session->user_agent);
+        $device = $this->clients->describe($session->user_agent);
 
         return [
             'fingerprint' => $this->fingerprint($user, (string) $session->id),
             'device' => $device['browser'],
             'platform' => $device['platform'],
-            'ip_address' => $this->maskIpAddress($session->ip_address),
+            'ip_address' => $this->clients->maskIpAddress($session->ip_address),
             'last_activity' => Carbon::createFromTimestamp((int) $session->last_activity)->toISOString(),
             'is_current' => $isCurrent,
         ];
@@ -136,65 +139,6 @@ class ManageDatabaseSessions
             ->first(function (string $sessionId) use ($user, $fingerprint): bool {
                 return hash_equals($this->fingerprint($user, $sessionId), $fingerprint);
             });
-    }
-
-    /**
-     * @return array{browser: string, platform: string|null}
-     */
-    private function describeUserAgent(?string $userAgent): array
-    {
-        if ($userAgent === null || trim($userAgent) === '') {
-            return [
-                'browser' => 'Unknown browser',
-                'platform' => null,
-            ];
-        }
-
-        $browser = match (true) {
-            str_contains($userAgent, 'Edg/') => 'Microsoft Edge',
-            str_contains($userAgent, 'Firefox/') => 'Firefox',
-            str_contains($userAgent, 'Chrome/') || str_contains($userAgent, 'CriOS/') => 'Chrome',
-            str_contains($userAgent, 'Safari/') => 'Safari',
-            default => 'Unknown browser',
-        };
-
-        $platform = match (true) {
-            str_contains($userAgent, 'Android') => 'Android',
-            str_contains($userAgent, 'iPhone'), str_contains($userAgent, 'iPad') => 'iOS',
-            str_contains($userAgent, 'Windows') => 'Windows',
-            str_contains($userAgent, 'Macintosh'), str_contains($userAgent, 'Mac OS X') => 'macOS',
-            str_contains($userAgent, 'Linux') => 'Linux',
-            default => null,
-        };
-
-        return [
-            'browser' => $browser,
-            'platform' => $platform,
-        ];
-    }
-
-    private function maskIpAddress(?string $ipAddress): string
-    {
-        if ($ipAddress === null || filter_var($ipAddress, FILTER_VALIDATE_IP) === false) {
-            return 'Unknown';
-        }
-
-        if (filter_var($ipAddress, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) !== false) {
-            $parts = explode('.', $ipAddress);
-            $parts[3] = 'x';
-
-            return implode('.', $parts);
-        }
-
-        $packedAddress = inet_pton($ipAddress);
-
-        if ($packedAddress === false) {
-            return 'Unknown';
-        }
-
-        $networkAddress = inet_ntop(substr($packedAddress, 0, 8).str_repeat("\0", 8));
-
-        return $networkAddress === false ? 'Unknown' : $networkAddress.'/64';
     }
 
     private function activeSince(): int
