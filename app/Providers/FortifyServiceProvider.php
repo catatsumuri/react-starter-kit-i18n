@@ -7,11 +7,14 @@ namespace App\Providers;
 use App\Actions\Fortify\CreateNewUser;
 /* @end-chisel-registration */
 use App\Actions\Fortify\ResetUserPassword;
+use App\Models\User;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
+use Illuminate\Support\Timebox;
 use Illuminate\Validation\Rules\Password;
 use Inertia\Inertia;
 use Laravel\Fortify\Features;
@@ -33,6 +36,7 @@ class FortifyServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->configureActions();
+        $this->configureAuthentication();
         $this->configureViews();
         $this->configureRateLimiting();
     }
@@ -46,6 +50,38 @@ class FortifyServiceProvider extends ServiceProvider
         /* @chisel-registration */
         Fortify::createUsersUsing(CreateNewUser::class);
         /* @end-chisel-registration */
+    }
+
+    /**
+     * Configure user authentication.
+     */
+    private function configureAuthentication(): void
+    {
+        Fortify::authenticateUsing(function (Request $request): ?User {
+            return (new Timebox)->call(function (Timebox $timebox) use ($request): ?User {
+                $login = Str::lower(trim($request->string(Fortify::username())->toString()));
+                $password = $request->string('password')->toString();
+
+                $user = User::query()
+                    ->where('email', $login)
+                    ->orWhere('username', $login)
+                    ->first();
+
+                if ($user === null || ! Hash::check($password, $user->password)) {
+                    return null;
+                }
+
+                if (config('hashing.rehash_on_login', true) && Hash::needsRehash($user->password)) {
+                    $user->forceFill([
+                        'password' => Hash::make($password),
+                    ])->save();
+                }
+
+                $timebox->returnEarly();
+
+                return $user;
+            }, microseconds: 200_000);
+        });
     }
 
     /**
@@ -101,7 +137,8 @@ class FortifyServiceProvider extends ServiceProvider
         /* @end-chisel-2fa */
 
         RateLimiter::for('login', function (Request $request) {
-            $throttleKey = Str::transliterate(Str::lower($request->input(Fortify::username())).'|'.$request->ip());
+            $login = Str::lower(trim($request->string(Fortify::username())->toString()));
+            $throttleKey = Str::transliterate($login.'|'.$request->ip());
 
             return Limit::perMinute(5)->by($throttleKey);
         });

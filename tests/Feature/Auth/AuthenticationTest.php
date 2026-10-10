@@ -4,6 +4,7 @@ namespace Tests\Feature\Auth;
 
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
 use Laravel\Fortify\Features;
 use Tests\TestCase;
@@ -24,12 +25,42 @@ class AuthenticationTest extends TestCase
         $user = User::factory()->create();
 
         $response = $this->post(route('login.store'), [
-            'email' => $user->email,
+            'email' => strtoupper($user->email),
             'password' => 'password',
         ]);
 
         $this->assertAuthenticated();
         $response->assertRedirect(route('dashboard', absolute: false));
+    }
+
+    public function test_users_can_authenticate_using_their_username()
+    {
+        $user = User::factory()->create([
+            'username' => 'test.user-name_1',
+        ]);
+
+        $response = $this->post(route('login.store'), [
+            'email' => strtoupper($user->username),
+            'password' => 'password',
+        ]);
+
+        $this->assertAuthenticatedAs($user);
+        $response->assertRedirect(route('dashboard', absolute: false));
+    }
+
+    public function test_password_is_rehashed_when_needed_after_authentication()
+    {
+        $user = User::factory()->create([
+            'password' => Hash::make('password', ['rounds' => 4]),
+        ]);
+
+        $this->post(route('login.store'), [
+            'email' => $user->email,
+            'password' => 'password',
+        ]);
+
+        $this->assertAuthenticatedAs($user);
+        $this->assertFalse(Hash::needsRehash($user->fresh()->password));
     }
 
     public function test_users_with_two_factor_enabled_are_redirected_to_two_factor_challenge()
