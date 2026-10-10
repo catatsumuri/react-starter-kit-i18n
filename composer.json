@@ -85,7 +85,8 @@
             "@php artisan package:discover --ansi"
         ],
         "post-install-cmd": [
-            "@patch-vendor"
+            "@patch-vendor",
+            "@php artisan lang:update --ansi"
         ],
         "post-update-cmd": [
             "@php artisan install:features --ansi",
