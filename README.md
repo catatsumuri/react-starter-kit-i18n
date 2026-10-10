@@ -27,10 +27,10 @@ To add a new locale (e.g. `ko`):
 1. If your components use custom strings not already listed in `lang/vendor-patches/source/react.json`, add them there first (English key/value pairs).
 2. Create `lang/vendor-patches/locales/ko.json` and translate every key from `source/react.json`, following the same structure as `lang/vendor-patches/locales/ja.json`. A key can be left out only if upstream already ships a translation for it in that locale (`ja.json` skips `"Warning"` for this reason) — when in doubt, translate it anyway; the patch just overrides the upstream value.
 3. Merge the patches into the vendor package and regenerate the translation files:
-   ```bash
-   composer patch-vendor
-   php artisan lang:update
-   ```
+    ```bash
+    composer patch-vendor
+    php artisan lang:update
+    ```
 
 `composer patch-vendor` (`scripts/patch-vendor.php`) merges everything under `lang/vendor-patches/source/` and `lang/vendor-patches/locales/` into the matching files inside `vendor/laravel-lang/starter-kits/`, taking your patch values over the upstream ones. `lang:update` then regenerates `lang/{locale}.json` and `lang/{locale}/*.php` for every locale it finds. `patch-vendor` also runs automatically after `composer install`/`composer update`, and `lang:update` runs automatically after `composer update` — but for a newly added locale, run both explicitly so the new locale is generated immediately.
 
@@ -61,23 +61,23 @@ composer dev
 
 Starts four processes concurrently:
 
-| Process | Command |
-|---------|---------|
-| HTTP server | `php artisan serve` |
-| Queue worker | `php artisan queue:listen` |
-| Log viewer | `php artisan pail` |
-| Vite dev server | `npm run dev` |
+| Process         | Command                    |
+| --------------- | -------------------------- |
+| HTTP server     | `php artisan serve`        |
+| Queue worker    | `php artisan queue:listen` |
+| Log viewer      | `php artisan pail`         |
+| Vite dev server | `npm run dev`              |
 
 ## Architecture
 
 ### Backend packages
 
-| Package | Role |
-|---------|------|
-| `laravel-lang/common` | Core translation pipeline (`lang:update` command) |
-| `laravel-lang/routes` | `LocalizationBySession` middleware |
+| Package                          | Role                                                         |
+| -------------------------------- | ------------------------------------------------------------ |
+| `laravel-lang/common`            | Core translation pipeline (`lang:update` command)            |
+| `laravel-lang/routes`            | `LocalizationBySession` middleware                           |
 | `erag/laravel-lang-sync-inertia` | Syncs `lang/{locale}.json` to Inertia shared props as `lang` |
-| `laravel/wayfinder` | Type-safe route references on the frontend |
+| `laravel/wayfinder`              | Type-safe route references on the frontend                   |
 
 ### Frontend
 
