@@ -1,6 +1,10 @@
 <?php
 
 return [
+    'export' => [
+        'enabled' => (bool) env('SECURITY_EXPORT_ENABLED', true),
+        'log_channel' => env('SECURITY_EXPORT_LOG_CHANNEL', 'security_export'),
+    ],
     'detection' => [
         'enabled' => (bool) env('SECURITY_DETECTION_ENABLED', false),
         'cache_store' => env('SECURITY_DETECTION_CACHE_STORE', 'redis'),

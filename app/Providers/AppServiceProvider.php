@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Listeners\SecurityAuditSubscriber;
+use App\Listeners\SecurityLogExportSubscriber;
 use App\Listeners\SecurityResponseSubscriber;
 use App\Listeners\SessionPolicySubscriber;
 use Carbon\CarbonImmutable;
@@ -29,6 +30,7 @@ class AppServiceProvider extends ServiceProvider
     {
         $this->configureDefaults();
         Event::subscribe(SecurityAuditSubscriber::class);
+        Event::subscribe(SecurityLogExportSubscriber::class);
         Event::subscribe(SecurityResponseSubscriber::class);
         Event::subscribe(SessionPolicySubscriber::class);
     }

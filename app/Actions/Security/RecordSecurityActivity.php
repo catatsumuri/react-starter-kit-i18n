@@ -138,6 +138,8 @@ class RecordSecurityActivity
                 clientKey: $clientKey,
                 clientDescription: $clientDescription,
                 metadata: is_array($properties['metadata']) ? $properties['metadata'] : [],
+                sessionFingerprint: is_string($properties['session_fingerprint']) ? $properties['session_fingerprint'] : null,
+                userAgent: $userAgent,
             );
         } catch (Throwable $exception) {
             report($exception);

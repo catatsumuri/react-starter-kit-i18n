@@ -23,5 +23,7 @@ class SecurityActivityObserved
         public ?string $clientKey,
         public string $clientDescription,
         public array $metadata = [],
+        public ?string $sessionFingerprint = null,
+        public ?string $userAgent = null,
     ) {}
 }
