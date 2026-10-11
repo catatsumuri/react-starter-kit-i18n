@@ -87,6 +87,16 @@ services:
         depends_on:
             loki:
                 condition: service_healthy
+        healthcheck:
+            test:
+                - CMD
+                - bash
+                - -c
+                - 'exec 3<>/dev/tcp/127.0.0.1/12345'
+            interval: 10s
+            timeout: 5s
+            retries: 5
+            start_period: 15s
     grafana:
         image: 'grafana/grafana:13.2.2'
         ports:
@@ -97,6 +107,8 @@ services:
             GF_USERS_ALLOW_SIGN_UP: 'false'
         volumes:
             - './docker/observability/grafana/datasources/loki.yaml:/etc/grafana/provisioning/datasources/loki.yaml:ro'
+            - './docker/observability/grafana/dashboards/security.yaml:/etc/grafana/provisioning/dashboards/security.yaml:ro'
+            - './docker/observability/grafana/dashboard-definitions:/etc/grafana/dashboards:ro'
             - 'sail-grafana:/var/lib/grafana'
         networks:
             - sail
