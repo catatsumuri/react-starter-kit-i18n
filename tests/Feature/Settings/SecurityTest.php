@@ -3,6 +3,7 @@
 namespace Tests\Feature\Settings;
 
 use App\Models\User;
+use App\Support\PurposeBoundAuthentication;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -31,7 +32,7 @@ class SecurityTest extends TestCase
 
         $this->actingAs($user)
             /* @chisel-password-confirmation */
-            ->withSession(['auth.password_confirmed_at' => time()])
+            ->withSession($this->confirmedSecuritySession())
             /* @end-chisel-password-confirmation */
             ->get(route('security.edit'))
             ->assertInertia(fn (Assert $page) => $page
@@ -74,7 +75,7 @@ class SecurityTest extends TestCase
 
         $this->actingAs($user)
             /* @chisel-password-confirmation */
-            ->withSession(['auth.password_confirmed_at' => time()])
+            ->withSession($this->confirmedSecuritySession())
             /* @end-chisel-password-confirmation */
             ->get(route('security.edit'))
             ->assertOk()
@@ -126,5 +127,14 @@ class SecurityTest extends TestCase
         $response
             ->assertSessionHasErrors('current_password')
             ->assertRedirect(route('security.edit'));
+    }
+
+    /** @return array<string, int|string> */
+    private function confirmedSecuritySession(): array
+    {
+        return [
+            'auth.password_confirmed_at' => time(),
+            PurposeBoundAuthentication::ConfirmedPurpose => PurposeBoundAuthentication::SecuritySettings,
+        ];
     }
 }

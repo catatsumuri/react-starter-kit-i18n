@@ -167,6 +167,8 @@ class SessionManagementTest extends TestCase
         Event::assertDispatched(
             AuthenticatedSessionRevoked::class,
             fn (AuthenticatedSessionRevoked $event): bool => $event->user->is($user)
+                && $event->actor?->is($user)
+                && $event->origin === AuthenticatedSessionRevoked::SelfService
                 && $event->scope === AuthenticatedSessionRevoked::Individual
                 && $event->revokedCount === 1
                 && $event->sessionFingerprint === $fingerprint,
@@ -228,6 +230,8 @@ class SessionManagementTest extends TestCase
         Event::assertDispatched(
             AuthenticatedSessionRevoked::class,
             fn (AuthenticatedSessionRevoked $event): bool => $event->scope === AuthenticatedSessionRevoked::OtherSessions
+                && $event->actor?->is($user)
+                && $event->origin === AuthenticatedSessionRevoked::SelfService
                 && $event->revokedCount === 2,
         );
     }
@@ -320,6 +324,8 @@ class SessionManagementTest extends TestCase
         Event::assertDispatched(
             AuthenticatedSessionRevoked::class,
             fn (AuthenticatedSessionRevoked $event): bool => $event->scope === AuthenticatedSessionRevoked::AllSessions
+                && $event->actor?->is($user)
+                && $event->origin === AuthenticatedSessionRevoked::SelfService
                 && $event->revokedCount === 2,
         );
     }
