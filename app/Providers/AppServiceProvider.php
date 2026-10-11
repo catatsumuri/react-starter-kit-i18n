@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use App\Listeners\SecurityAuditSubscriber;
 use App\Listeners\SecurityResponseSubscriber;
+use App\Listeners\SessionPolicySubscriber;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
@@ -29,6 +30,7 @@ class AppServiceProvider extends ServiceProvider
         $this->configureDefaults();
         Event::subscribe(SecurityAuditSubscriber::class);
         Event::subscribe(SecurityResponseSubscriber::class);
+        Event::subscribe(SessionPolicySubscriber::class);
     }
 
     /**

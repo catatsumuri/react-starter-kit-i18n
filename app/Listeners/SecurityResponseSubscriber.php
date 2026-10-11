@@ -67,6 +67,10 @@ class SecurityResponseSubscriber
             return;
         }
 
+        if (($event->metadata['notify_owner'] ?? true) === false) {
+            return;
+        }
+
         $notification = self::UserNotifications[$event->event] ?? null;
 
         if ($notification === null) {

@@ -36,6 +36,13 @@ return [
 
     'expire_on_close' => env('SESSION_EXPIRE_ON_CLOSE', false),
 
+    'absolute_lifetime' => (int) env('SESSION_ABSOLUTE_LIFETIME', 10080),
+
+    'authentication_context_cookie' => env(
+        'SESSION_AUTHENTICATION_CONTEXT_COOKIE',
+        Str::slug((string) env('APP_NAME', 'laravel')).'-authentication-context',
+    ),
+
     /*
     |--------------------------------------------------------------------------
     | Session Encryption

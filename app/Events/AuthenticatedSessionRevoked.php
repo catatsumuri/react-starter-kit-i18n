@@ -20,12 +20,16 @@ class AuthenticatedSessionRevoked
 
     public const OperatorCli = 'operator_cli';
 
+    public const SecurityChange = 'security_change';
+
     public function __construct(
         public User $user,
         public string $scope,
-        public int $revokedCount,
+        public ?int $revokedCount,
         public ?string $sessionFingerprint = null,
         public ?User $actor = null,
         public string $origin = self::SelfService,
+        public ?string $reason = null,
+        public bool $notifyOwner = true,
     ) {}
 }

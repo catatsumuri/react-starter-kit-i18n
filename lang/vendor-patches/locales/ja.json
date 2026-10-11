@@ -59,6 +59,7 @@
     "Session management is not available with the configured session storage. Please try again later or contact the administrator.": "現在のセッション保存方式ではセッション管理を利用できません。後でもう一度試すか、管理者にお問い合わせください。",
     "Session revoked.": "セッションを失効しました。",
     "Session access revoked": "セッションアクセスを失効しました",
+    "Your session has expired. Please sign in again.": "セッションの有効期限が切れました。もう一度ログインしてください。",
     "Sessions": "セッション",
     "Sessions are temporarily unavailable. Please try again.": "セッションは一時的に利用できません。もう一度お試しください。",
     "Sign out other browsers or every browser connected to your account.": "アカウントに接続している他のブラウザー、またはすべてのブラウザーからログアウトします。",

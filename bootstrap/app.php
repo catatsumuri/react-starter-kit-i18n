@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\EnforceAuthenticatedSessionPolicy;
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
 use Illuminate\Foundation\Application;
@@ -7,6 +8,7 @@ use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets;
 use Illuminate\Http\Request;
+use Illuminate\Session\Middleware\AuthenticateSession;
 use LaravelLang\Routes\Middlewares\LocalizationBySession;
 
 return Application::configure(basePath: dirname(__DIR__))
@@ -19,6 +21,8 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->encryptCookies(except: ['appearance', 'sidebar_state']);
 
         $middleware->web(append: [
+            AuthenticateSession::class,
+            EnforceAuthenticatedSessionPolicy::class,
             LocalizationBySession::class,
             HandleAppearance::class,
             HandleInertiaRequests::class,

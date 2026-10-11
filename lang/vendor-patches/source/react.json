@@ -59,6 +59,7 @@
     "Session management is not available with the configured session storage. Please try again later or contact the administrator.": "Session management is not available with the configured session storage. Please try again later or contact the administrator.",
     "Session revoked.": "Session revoked.",
     "Session access revoked": "Session access revoked",
+    "Your session has expired. Please sign in again.": "Your session has expired. Please sign in again.",
     "Sessions": "Sessions",
     "Sessions are temporarily unavailable. Please try again.": "Sessions are temporarily unavailable. Please try again.",
     "Sign out other browsers or every browser connected to your account.": "Sign out other browsers or every browser connected to your account.",

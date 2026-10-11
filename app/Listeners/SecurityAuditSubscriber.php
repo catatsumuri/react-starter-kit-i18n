@@ -82,6 +82,8 @@ class SecurityAuditSubscriber
                 'scope' => $event->scope,
                 'revoked_count' => $event->revokedCount,
                 'origin' => $event->origin,
+                'reason' => $event->reason,
+                'notify_owner' => $event->notifyOwner,
             ],
             sessionFingerprint: $event->sessionFingerprint,
         );
