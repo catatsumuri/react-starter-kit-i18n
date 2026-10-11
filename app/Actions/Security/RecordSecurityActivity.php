@@ -2,6 +2,7 @@
 
 namespace App\Actions\Security;
 
+use App\Events\SecurityActivityObserved;
 use App\Models\User;
 use App\Support\ClientDescriptor;
 use Illuminate\Http\Request;
@@ -22,15 +23,17 @@ class RecordSecurityActivity
         array $metadata = [],
         ?string $sessionFingerprint = null,
     ): void {
+        $properties = $this->properties(
+            result: 'success',
+            authenticationMethod: $authenticationMethod,
+            metadata: $metadata,
+            sessionFingerprint: $sessionFingerprint,
+        );
+
         try {
             $logger = activity('security')
                 ->event($event)
-                ->withProperties($this->properties(
-                    result: 'success',
-                    authenticationMethod: $authenticationMethod,
-                    metadata: $metadata,
-                    sessionFingerprint: $sessionFingerprint,
-                ));
+                ->withProperties($properties);
 
             $actor === null ? $logger->byAnonymous() : $logger->causedBy($actor);
 
@@ -42,6 +45,8 @@ class RecordSecurityActivity
         } catch (Throwable $exception) {
             report($exception);
         }
+
+        $this->observe($event, $properties, $actor, $target);
     }
 
     /** @param array<string, bool|int|string|null> $metadata */
@@ -51,14 +56,18 @@ class RecordSecurityActivity
         ?string $authenticationMethod = null,
         array $metadata = [],
     ): void {
+        $properties = $this->properties('failure', $authenticationMethod, $metadata);
+
         try {
             Log::channel('security')->warning($event, [
-                ...$this->properties('failure', $authenticationMethod, $metadata),
+                ...$properties,
                 'target_user_id' => $target?->getKey(),
             ]);
         } catch (Throwable $exception) {
             report($exception);
         }
+
+        $this->observe($event, $properties, null, $target);
     }
 
     public function resolveTarget(Request $request): ?User
@@ -103,5 +112,40 @@ class RecordSecurityActivity
             'auth_method' => $authenticationMethod,
             'metadata' => $metadata,
         ];
+    }
+
+    /** @param array<string, mixed> $properties */
+    private function observe(string $event, array $properties, ?User $actor, ?User $target): void
+    {
+        try {
+            $ipAddress = is_string($properties['client_ip']) ? $properties['client_ip'] : null;
+            $userAgent = is_string($properties['user_agent']) ? $properties['user_agent'] : null;
+            $client = $this->clients->describe($userAgent);
+            $clientDescription = implode(' on ', array_filter([$client['browser'], $client['platform']]));
+            $clientKey = $client['browser'] === 'Unknown browser' && $client['platform'] === null
+                ? null
+                : $this->keyedIdentifier($clientDescription);
+
+            SecurityActivityObserved::dispatch(
+                event: $event,
+                result: (string) $properties['result'],
+                actorUserId: $actor?->getKey(),
+                targetUserId: $target?->getKey(),
+                authenticationMethod: is_string($properties['auth_method']) ? $properties['auth_method'] : null,
+                requestId: (string) $properties['request_id'],
+                networkKey: $this->keyedIdentifier($ipAddress ?? 'unknown'),
+                maskedIpAddress: $this->clients->maskIpAddress($ipAddress),
+                clientKey: $clientKey,
+                clientDescription: $clientDescription,
+                metadata: is_array($properties['metadata']) ? $properties['metadata'] : [],
+            );
+        } catch (Throwable $exception) {
+            report($exception);
+        }
+    }
+
+    private function keyedIdentifier(string $value): string
+    {
+        return hash_hmac('sha256', $value, (string) config('app.key'));
     }
 }

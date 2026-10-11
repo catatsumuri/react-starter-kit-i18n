@@ -32,6 +32,7 @@ class ProfileController extends Controller
      */
     public function update(ProfileUpdateRequest $request): RedirectResponse
     {
+        $previousEmail = $request->user()->email;
         $request->user()->fill($request->validated());
         $emailChanged = $request->user()->isDirty('email');
 
@@ -42,7 +43,7 @@ class ProfileController extends Controller
         $request->user()->save();
 
         if ($emailChanged) {
-            UserEmailChanged::dispatch($request->user());
+            UserEmailChanged::dispatch($request->user(), $previousEmail);
         }
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Profile updated.')]);
