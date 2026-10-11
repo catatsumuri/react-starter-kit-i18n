@@ -5,6 +5,7 @@ use App\Http\Controllers\Settings\SecurityActivityController;
 use App\Http\Controllers\Settings\SecurityController;
 use App\Http\Controllers\Settings\SessionController;
 use App\Http\Middleware\AuditAuthenticationFailures;
+use App\Http\Middleware\RequirePurposeBoundAuthentication;
 use App\Http\Middleware\RequireRecentAuthenticationForEmailChange;
 /* @chisel-password-confirmation */
 use Illuminate\Auth\Middleware\RequirePassword;
@@ -25,7 +26,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::get('settings/security', [SecurityController::class, 'edit'])
         /* @chisel-password-confirmation */
-        ->middleware(RequirePassword::class)
+        ->middleware(RequirePurposeBoundAuthentication::class)
         /* @end-chisel-password-confirmation */
         ->name('security.edit');
 

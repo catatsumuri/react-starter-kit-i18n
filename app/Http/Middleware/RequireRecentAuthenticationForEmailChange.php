@@ -3,15 +3,15 @@
 namespace App\Http\Middleware;
 
 use App\Models\User;
+use App\Support\PurposeBoundAuthentication;
 use Closure;
-use Illuminate\Auth\Middleware\RequirePassword;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\Response;
 
 class RequireRecentAuthenticationForEmailChange
 {
-    public function __construct(private RequirePassword $password) {}
+    public function __construct(private RequirePurposeBoundAuthentication $authentication) {}
 
     public function handle(Request $request, Closure $next): Response
     {
@@ -21,7 +21,11 @@ class RequireRecentAuthenticationForEmailChange
             return $next($request);
         }
 
-        return $this->password->handle($request, $next);
+        return $this->authentication->handleForPurpose(
+            $request,
+            $next,
+            PurposeBoundAuthentication::EmailChange,
+        );
     }
 
     private function changesEmail(Request $request, User $user): bool
