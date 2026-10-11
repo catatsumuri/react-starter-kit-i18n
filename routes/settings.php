@@ -5,6 +5,7 @@ use App\Http\Controllers\Settings\SecurityActivityController;
 use App\Http\Controllers\Settings\SecurityController;
 use App\Http\Controllers\Settings\SessionController;
 use App\Http\Middleware\AuditAuthenticationFailures;
+use App\Http\Middleware\RequireRecentAuthenticationForEmailChange;
 /* @chisel-password-confirmation */
 use Illuminate\Auth\Middleware\RequirePassword;
 /* @end-chisel-password-confirmation */
@@ -14,7 +15,9 @@ Route::middleware(['auth'])->group(function () {
     Route::redirect('settings', '/settings/profile');
 
     Route::get('settings/profile', [ProfileController::class, 'edit'])->name('profile.edit');
-    Route::patch('settings/profile', [ProfileController::class, 'update'])->name('profile.update');
+    Route::patch('settings/profile', [ProfileController::class, 'update'])
+        ->middleware(RequireRecentAuthenticationForEmailChange::class)
+        ->name('profile.update');
 });
 
 Route::middleware(['auth', 'verified'])->group(function () {
