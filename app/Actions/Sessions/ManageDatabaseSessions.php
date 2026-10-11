@@ -97,6 +97,23 @@ class ManageDatabaseSessions
             ->delete();
     }
 
+    public function activeSessionCount(User $user): int
+    {
+        return $this->connection()
+            ->table($this->table())
+            ->where('user_id', $user->getAuthIdentifier())
+            ->where('last_activity', '>=', $this->activeSince())
+            ->count();
+    }
+
+    public function storedSessionCount(User $user): int
+    {
+        return $this->connection()
+            ->table($this->table())
+            ->where('user_id', $user->getAuthIdentifier())
+            ->count();
+    }
+
     public function fingerprint(User $user, string $sessionId): string
     {
         return hash_hmac(

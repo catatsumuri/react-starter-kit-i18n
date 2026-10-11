@@ -63,10 +63,11 @@ class SessionController extends Controller
         abort_unless($revoked, 404);
 
         AuthenticatedSessionRevoked::dispatch(
-            $request->user(),
-            AuthenticatedSessionRevoked::Individual,
-            1,
-            $fingerprint,
+            user: $request->user(),
+            scope: AuthenticatedSessionRevoked::Individual,
+            revokedCount: 1,
+            sessionFingerprint: $fingerprint,
+            actor: $request->user(),
         );
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Session revoked.')]);
@@ -90,9 +91,10 @@ class SessionController extends Controller
         }
 
         AuthenticatedSessionRevoked::dispatch(
-            $request->user(),
-            AuthenticatedSessionRevoked::OtherSessions,
-            $revokedCount,
+            user: $request->user(),
+            scope: AuthenticatedSessionRevoked::OtherSessions,
+            revokedCount: $revokedCount,
+            actor: $request->user(),
         );
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Other sessions revoked.')]);
@@ -115,9 +117,10 @@ class SessionController extends Controller
         }
 
         AuthenticatedSessionRevoked::dispatch(
-            $user,
-            AuthenticatedSessionRevoked::AllSessions,
-            $revokedCount,
+            user: $user,
+            scope: AuthenticatedSessionRevoked::AllSessions,
+            revokedCount: $revokedCount,
+            actor: $user,
         );
 
         Auth::guard('web')->logout();

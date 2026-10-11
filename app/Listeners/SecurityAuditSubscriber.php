@@ -76,9 +76,13 @@ class SecurityAuditSubscriber
     {
         $this->audit->success(
             'session.revoked',
+            $event->actor,
             $event->user,
-            $event->user,
-            metadata: ['scope' => $event->scope, 'revoked_count' => $event->revokedCount],
+            metadata: [
+                'scope' => $event->scope,
+                'revoked_count' => $event->revokedCount,
+                'origin' => $event->origin,
+            ],
             sessionFingerprint: $event->sessionFingerprint,
         );
     }
