@@ -3,9 +3,11 @@
 namespace App\Console\Commands;
 
 use App\Actions\Notifications\SendGeneralNotification;
+use App\Actions\Notifications\SendThrowableAlert;
 use App\Models\User;
 use Illuminate\Console\Command;
 use InvalidArgumentException;
+use RuntimeException;
 
 class SendNotificationCommand extends Command
 {
@@ -17,6 +19,8 @@ class SendNotificationCommand extends Command
     protected $signature = 'notifications:send
         {user? : User ID or email address}
         {--alert : Send to the shared alert mailbox and Slack channel instead of a user}
+        {--exception : Report a test exception through the same path as real errors (implies --alert)}
+        {--no-throttle : With --exception, skip the five-minute duplicate suppression}
         {--channel=* : Alert channels to use (mail, slack); defaults to all}
         {--title= : Notification title}
         {--body= : Notification body}
@@ -29,8 +33,14 @@ class SendNotificationCommand extends Command
      */
     protected $description = 'Send a notification to a registered user or the shared alert recipients';
 
-    public function handle(SendGeneralNotification $sendGeneralNotification): int
-    {
+    public function handle(
+        SendGeneralNotification $sendGeneralNotification,
+        SendThrowableAlert $sendThrowableAlert,
+    ): int {
+        if ($this->option('exception')) {
+            return $this->reportTestException($sendThrowableAlert);
+        }
+
         $user = null;
 
         if (! $this->option('alert')) {
@@ -65,6 +75,26 @@ class SendNotificationCommand extends Command
         }
 
         $this->info("Notification sent to {$user->name} ({$user->email}).");
+
+        return self::SUCCESS;
+    }
+
+    protected function reportTestException(SendThrowableAlert $sendThrowableAlert): int
+    {
+        $message = $this->option('body');
+
+        $sent = $sendThrowableAlert->handle(
+            new RuntimeException(is_string($message) && $message !== '' ? $message : 'Test exception from notifications:send'),
+            throttle: ! $this->option('no-throttle'),
+        );
+
+        if ($sent === []) {
+            $this->error('The alert was not sent (duplicate within five minutes, no recipient configured, or delivery failed; see the log).');
+
+            return self::FAILURE;
+        }
+
+        $this->info('Test exception alert sent via: '.implode(', ', $sent).'.');
 
         return self::SUCCESS;
     }

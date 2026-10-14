@@ -85,7 +85,7 @@ class NotificationTest extends TestCase
         Notification::fake();
         config([
             'services.alerts.mail_to' => 'ops@example.com',
-            'services.slack.notifications.channel' => '#alerts',
+            'services.alerts.slack_webhook_url' => 'https://hooks.slack.com/services/T/B/X',
         ]);
 
         $sent = (new SendGeneralNotification)->toAlertRecipients('Down', 'Queue is failing.');
@@ -96,7 +96,7 @@ class NotificationTest extends TestCase
             function (GeneralNotification $notification, array $channels, AnonymousNotifiable $notifiable): bool {
                 return $channels === ['mail', 'slack']
                     && $notifiable->routes['mail'] === 'ops@example.com'
-                    && $notifiable->routes['slack'] === '#alerts';
+                    && $notifiable->routes['slack'] === 'https://hooks.slack.com/services/T/B/X';
             },
         );
     }
@@ -106,7 +106,7 @@ class NotificationTest extends TestCase
         Notification::fake();
         config([
             'services.alerts.mail_to' => 'ops@example.com',
-            'services.slack.notifications.channel' => null,
+            'services.alerts.slack_webhook_url' => null,
         ]);
 
         $sent = (new SendGeneralNotification)->toAlertRecipients('Down', 'Queue is failing.');
@@ -126,7 +126,7 @@ class NotificationTest extends TestCase
         Notification::fake();
         config([
             'services.alerts.mail_to' => 'ops@example.com',
-            'services.slack.notifications.channel' => '#alerts',
+            'services.alerts.slack_webhook_url' => 'https://hooks.slack.com/services/T/B/X',
         ]);
 
         $this->artisan('notifications:send', [
@@ -147,7 +147,7 @@ class NotificationTest extends TestCase
     {
         config([
             'services.alerts.mail_to' => null,
-            'services.slack.notifications.channel' => null,
+            'services.alerts.slack_webhook_url' => null,
         ]);
 
         $this->artisan('notifications:send', [
@@ -170,5 +170,37 @@ class NotificationTest extends TestCase
         report($exception);
 
         Notification::assertSentOnDemandTimes(GeneralNotification::class, 1);
+    }
+
+    public function test_an_alert_is_still_sent_when_the_cache_is_unavailable(): void
+    {
+        Notification::fake();
+        config(['services.alerts.mail_to' => 'ops@example.com']);
+        Cache::shouldReceive('add')->once()->andThrow(new RuntimeException('cache down'));
+
+        report(new RuntimeException('Boom'));
+
+        Notification::assertSentOnDemandTimes(GeneralNotification::class, 1);
+    }
+
+    public function test_the_exception_command_sends_through_the_throwable_alert_path(): void
+    {
+        Notification::fake();
+        Cache::flush();
+        config(['services.alerts.mail_to' => 'ops@example.com']);
+
+        $this->artisan('notifications:send', ['--exception' => true, '--body' => 'Probe'])
+            ->assertSuccessful();
+
+        $this->artisan('notifications:send', ['--exception' => true, '--body' => 'Probe'])
+            ->assertFailed();
+
+        $this->artisan('notifications:send', [
+            '--exception' => true,
+            '--no-throttle' => true,
+            '--body' => 'Probe',
+        ])->assertSuccessful();
+
+        Notification::assertSentOnDemandTimes(GeneralNotification::class, 2);
     }
 }

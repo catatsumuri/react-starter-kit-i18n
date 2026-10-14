@@ -30,6 +30,7 @@ return [
 
     'alerts' => [
         'mail_to' => env('ALERT_MAIL_TO'),
+        'slack_webhook_url' => env('ALERT_SLACK_WEBHOOK_URL', env('LOG_SLACK_WEBHOOK_URL')),
     ],
 
     'slack' => [

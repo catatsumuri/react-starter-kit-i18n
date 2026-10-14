@@ -44,7 +44,7 @@ class SendGeneralNotification
 
         $routes = array_filter([
             'mail' => config('services.alerts.mail_to'),
-            'slack' => config('services.slack.notifications.channel'),
+            'slack' => config('services.alerts.slack_webhook_url'),
         ]);
 
         $deliverable = array_values(array_intersect($channels, array_keys($routes)));
