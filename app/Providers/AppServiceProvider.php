@@ -2,9 +2,12 @@
 
 namespace App\Providers;
 
+use App\Actions\Notifications\SendThrowableAlert;
 use Carbon\CarbonImmutable;
+use Illuminate\Queue\Events\JobFailed;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
 
@@ -24,6 +27,17 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->configureDefaults();
+        $this->configureFailedJobAlerts();
+    }
+
+    /**
+     * Notify the shared alert recipients when a queued job fails.
+     */
+    protected function configureFailedJobAlerts(): void
+    {
+        Event::listen(JobFailed::class, function (JobFailed $event): void {
+            app(SendThrowableAlert::class)->handle($event->exception);
+        });
     }
 
     /**

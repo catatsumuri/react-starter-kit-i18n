@@ -6,7 +6,11 @@ use App\Actions\Notifications\SendGeneralNotification;
 use App\Models\User;
 use App\Notifications\GeneralNotification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Notifications\AnonymousNotifiable;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Notification;
 use InvalidArgumentException;
+use RuntimeException;
 use Tests\TestCase;
 
 class NotificationTest extends TestCase
@@ -74,5 +78,97 @@ class NotificationTest extends TestCase
             ->assertNotFound();
 
         $this->assertNull($notification->fresh()->read_at);
+    }
+
+    public function test_an_alert_is_sent_to_the_configured_mail_and_slack_routes(): void
+    {
+        Notification::fake();
+        config([
+            'services.alerts.mail_to' => 'ops@example.com',
+            'services.slack.notifications.channel' => '#alerts',
+        ]);
+
+        $sent = (new SendGeneralNotification)->toAlertRecipients('Down', 'Queue is failing.');
+
+        $this->assertSame(['mail', 'slack'], $sent);
+        Notification::assertSentOnDemand(
+            GeneralNotification::class,
+            function (GeneralNotification $notification, array $channels, AnonymousNotifiable $notifiable): bool {
+                return $channels === ['mail', 'slack']
+                    && $notifiable->routes['mail'] === 'ops@example.com'
+                    && $notifiable->routes['slack'] === '#alerts';
+            },
+        );
+    }
+
+    public function test_an_alert_skips_unconfigured_channels(): void
+    {
+        Notification::fake();
+        config([
+            'services.alerts.mail_to' => 'ops@example.com',
+            'services.slack.notifications.channel' => null,
+        ]);
+
+        $sent = (new SendGeneralNotification)->toAlertRecipients('Down', 'Queue is failing.');
+
+        $this->assertSame(['mail'], $sent);
+    }
+
+    public function test_an_alert_rejects_an_insecure_action_url(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+
+        (new SendGeneralNotification)->toAlertRecipients('Down', 'Body', 'http://example.com');
+    }
+
+    public function test_the_alert_command_sends_to_requested_channels(): void
+    {
+        Notification::fake();
+        config([
+            'services.alerts.mail_to' => 'ops@example.com',
+            'services.slack.notifications.channel' => '#alerts',
+        ]);
+
+        $this->artisan('notifications:send', [
+            '--alert' => true,
+            '--channel' => ['mail'],
+            '--title' => 'Test',
+            '--body' => 'Test alert',
+            '--url' => '',
+        ])->assertSuccessful();
+
+        Notification::assertSentOnDemand(
+            GeneralNotification::class,
+            fn (GeneralNotification $notification, array $channels): bool => $channels === ['mail'],
+        );
+    }
+
+    public function test_the_alert_command_fails_without_recipients(): void
+    {
+        config([
+            'services.alerts.mail_to' => null,
+            'services.slack.notifications.channel' => null,
+        ]);
+
+        $this->artisan('notifications:send', [
+            '--alert' => true,
+            '--title' => 'Test',
+            '--body' => 'Test alert',
+            '--url' => '',
+        ])->assertFailed();
+    }
+
+    public function test_reported_exceptions_trigger_a_throttled_alert(): void
+    {
+        Notification::fake();
+        Cache::flush();
+        config(['services.alerts.mail_to' => 'ops@example.com']);
+
+        $exception = new RuntimeException('Boom');
+
+        report($exception);
+        report($exception);
+
+        Notification::assertSentOnDemandTimes(GeneralNotification::class, 1);
     }
 }
