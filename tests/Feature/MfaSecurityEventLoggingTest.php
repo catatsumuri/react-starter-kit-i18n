@@ -5,6 +5,9 @@ namespace Tests\Feature;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
+use Laravel\Fortify\Actions\DisableTwoFactorAuthentication;
+use Laravel\Fortify\Actions\EnableTwoFactorAuthentication;
+use Laravel\Fortify\Actions\GenerateNewRecoveryCodes;
 use PragmaRX\Google2FA\Google2FA;
 use Spatie\Activitylog\Models\Activity;
 use Tests\TestCase;
@@ -131,6 +134,26 @@ class MfaSecurityEventLoggingTest extends TestCase
         $this->actingAsPasswordConfirmed($user)->post('/user/confirmed-two-factor-authentication', ['code' => $code]);
 
         $this->assertSame(0, Activity::inLog('security')->count());
+    }
+
+    public function test_a_cancelled_save_after_a_successful_one_on_the_same_instance_is_not_recorded(): void
+    {
+        $user = User::factory()->create();
+
+        app(EnableTwoFactorAuthentication::class)($user);
+        app(GenerateNewRecoveryCodes::class)($user);
+        $recorded = Activity::inLog('security')->count();
+
+        User::updating(fn () => false);
+
+        try {
+            app(GenerateNewRecoveryCodes::class)($user);
+            app(DisableTwoFactorAuthentication::class)($user);
+        } finally {
+            User::flushEventListeners();
+        }
+
+        $this->assertSame($recorded, Activity::inLog('security')->count());
     }
 
     private function actingAsPasswordConfirmed(?User $user = null): static

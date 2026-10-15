@@ -44,6 +44,8 @@ class AppServiceProvider extends ServiceProvider
      */
     protected function configureSecurityEventLogging(): void
     {
+        $saved = fn (User $user, string $key): bool => array_key_exists($key, $user->getPrevious()) && ! $user->isDirty($key);
+
         $record = function (object $event, string $name, ?Closure $stored = null, array $properties = []): void {
             $user = $event->user;
 
@@ -58,35 +60,36 @@ class AppServiceProvider extends ServiceProvider
 
         /*
          * Fortify dispatches the two-factor events even when the underlying save
-         * was cancelled or did not change anything. Each listener inspects the
-         * attributes the save actually changed (previous values), so only a real
-         * transition is recorded and no extra query can fail.
+         * was cancelled or did not change anything. Each listener checks that the
+         * attribute is among the last save's changes (previous values) and has no
+         * unsaved change left, so a cancelled save cannot reuse an earlier save's
+         * history and no extra query can fail.
          */
-        Event::listen(TwoFactorAuthenticationEnabled::class, function (TwoFactorAuthenticationEnabled $event) use ($record): void {
+        Event::listen(TwoFactorAuthenticationEnabled::class, function (TwoFactorAuthenticationEnabled $event) use ($record, $saved): void {
             if (! Fortify::confirmsTwoFactorAuthentication()) {
-                $record($event, 'mfa.enabled', fn ($event) => array_key_exists('two_factor_secret', $event->user->getPrevious()));
+                $record($event, 'mfa.enabled', fn ($event) => $saved($event->user, 'two_factor_secret'));
             }
         });
 
         Event::listen(TwoFactorAuthenticationConfirmed::class, fn (TwoFactorAuthenticationConfirmed $event) => $record(
             $event, 'mfa.enabled',
-            fn ($event) => array_key_exists('two_factor_confirmed_at', $event->user->getPrevious()) && $event->user->getPrevious()['two_factor_confirmed_at'] === null,
+            fn ($event) => $saved($event->user, 'two_factor_confirmed_at') && $event->user->getPrevious()['two_factor_confirmed_at'] === null,
         ));
 
-        Event::listen(TwoFactorAuthenticationDisabled::class, function (TwoFactorAuthenticationDisabled $event) use ($record): void {
+        Event::listen(TwoFactorAuthenticationDisabled::class, function (TwoFactorAuthenticationDisabled $event) use ($record, $saved): void {
             $wasActive = ! Fortify::confirmsTwoFactorAuthentication()
                 || isset($event->user->getPrevious()['two_factor_confirmed_at']);
 
             $record(
                 $event, 'mfa.disabled',
-                fn ($event) => array_key_exists('two_factor_secret', $event->user->getPrevious()),
+                fn ($event) => $saved($event->user, 'two_factor_secret'),
                 ['was_active' => $wasActive],
             );
         });
 
         Event::listen(RecoveryCodesGenerated::class, fn (RecoveryCodesGenerated $event) => $record(
             $event, 'mfa.recovery_codes.regenerated',
-            fn ($event) => array_key_exists('two_factor_recovery_codes', $event->user->getPrevious()),
+            fn ($event) => $saved($event->user, 'two_factor_recovery_codes'),
         ));
 
         /*
