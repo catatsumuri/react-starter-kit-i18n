@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Route;
 use Spatie\Activitylog\Models\Activity;
 use Tests\TestCase;
 
@@ -47,6 +48,27 @@ class LogWriteRequestsTest extends TestCase
 
         $this->assertModelMissing($user);
         $this->assertSame($user->id, Activity::inLog('http')->sole()->causer_id);
+    }
+
+    public function test_secret_route_parameters_and_oversized_fields_are_not_stored_raw(): void
+    {
+        Route::middleware('web')->post('/audit-probe/{token}/{item}', fn () => 'ok');
+
+        $this->post('/audit-probe/SECRETTOKEN/'.str_repeat('a', 500).'?api_key=QSECRET', [
+            'body_secret' => 'BODYSECRET',
+            str_repeat('f', 500) => 'x',
+        ] + array_fill_keys(range(1, 100), 'x'));
+
+        $activity = Activity::inLog('http')->sole();
+        $stored = json_encode($activity->properties);
+
+        $this->assertSame('audit-probe/{token}/{item}', $activity->getProperty('path'));
+        $this->assertSame('[masked]', $activity->getProperty('parameters')['token']);
+        $this->assertLessThanOrEqual(53, mb_strlen($activity->getProperty('parameters')['item']));
+        $this->assertLessThanOrEqual(50, count($activity->getProperty('fields')));
+        foreach (['SECRETTOKEN', 'QSECRET', 'BODYSECRET'] as $secret) {
+            $this->assertStringNotContainsString($secret, $stored.$activity->description);
+        }
     }
 
     public function test_read_requests_are_not_logged(): void
