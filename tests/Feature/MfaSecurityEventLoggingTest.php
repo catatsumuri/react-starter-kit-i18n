@@ -1,0 +1,102 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Models\User;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use PragmaRX\Google2FA\Google2FA;
+use Spatie\Activitylog\Models\Activity;
+use Tests\TestCase;
+
+class MfaSecurityEventLoggingTest extends TestCase
+{
+    use RefreshDatabase;
+
+    public function test_starting_two_factor_setup_is_not_recorded_until_it_is_confirmed(): void
+    {
+        $this->actingAsPasswordConfirmed()->post('/user/two-factor-authentication');
+
+        $this->assertSame(0, Activity::inLog('security')->count());
+    }
+
+    public function test_confirming_two_factor_records_mfa_enabled_linked_to_the_http_log(): void
+    {
+        $user = $this->enableAndConfirmTwoFactor();
+
+        $event = Activity::inLog('security')->sole();
+        $http = Activity::inLog('http')->latest('id')->first();
+
+        $this->assertSame('mfa.enabled', $event->description);
+        $this->assertTrue($event->subject->is($user));
+        $this->assertTrue($event->causer->is($user));
+        $this->assertSame($http->getProperty('request_id'), $event->getProperty('request_id'));
+    }
+
+    public function test_disabling_confirmed_two_factor_records_mfa_disabled_as_active(): void
+    {
+        $user = $this->enableAndConfirmTwoFactor();
+        Activity::inLog('security')->delete();
+
+        $this->actingAsPasswordConfirmed($user)->delete('/user/two-factor-authentication');
+
+        $event = Activity::inLog('security')->sole();
+
+        $this->assertSame('mfa.disabled', $event->description);
+        $this->assertTrue($event->getProperty('was_active'));
+    }
+
+    public function test_cancelling_an_unconfirmed_setup_is_recorded_as_not_active(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAsPasswordConfirmed($user)->post('/user/two-factor-authentication');
+        $this->actingAsPasswordConfirmed($user)->delete('/user/two-factor-authentication');
+
+        $event = Activity::inLog('security')->sole();
+
+        $this->assertSame('mfa.disabled', $event->description);
+        $this->assertFalse($event->getProperty('was_active'));
+    }
+
+    public function test_regenerating_recovery_codes_is_recorded_without_the_codes(): void
+    {
+        $user = $this->enableAndConfirmTwoFactor();
+        Activity::inLog('security')->delete();
+
+        $this->actingAsPasswordConfirmed($user)->post('/user/two-factor-recovery-codes');
+
+        $event = Activity::inLog('security')->sole();
+
+        $this->assertSame('mfa.recovery_codes.regenerated', $event->description);
+        $this->assertStringNotContainsString($user->fresh()->recoveryCodes()[0], json_encode($event->properties));
+    }
+
+    public function test_a_wrong_confirmation_code_does_not_record_mfa_enabled(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAsPasswordConfirmed($user)->post('/user/two-factor-authentication');
+
+        $this->actingAsPasswordConfirmed($user)->post('/user/confirmed-two-factor-authentication', ['code' => '000000']);
+
+        $this->assertSame(0, Activity::inLog('security')->count());
+    }
+
+    private function actingAsPasswordConfirmed(?User $user = null): static
+    {
+        return $this->actingAs($user ?? User::factory()->create())
+            ->withSession(['auth.password_confirmed_at' => time()]);
+    }
+
+    private function enableAndConfirmTwoFactor(): User
+    {
+        $user = User::factory()->create();
+
+        $this->actingAsPasswordConfirmed($user)->post('/user/two-factor-authentication');
+
+        $secret = decrypt($user->fresh()->two_factor_secret);
+        $code = app(Google2FA::class)->getCurrentOtp($secret);
+
+        $this->actingAsPasswordConfirmed($user)->post('/user/confirmed-two-factor-authentication', ['code' => $code]);
+
+        return $user->fresh();
+    }
+}
