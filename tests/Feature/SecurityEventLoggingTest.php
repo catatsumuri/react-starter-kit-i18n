@@ -2,8 +2,10 @@
 
 namespace Tests\Feature;
 
+use App\Actions\LogSecurityEvent;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Context;
 use Spatie\Activitylog\Models\Activity;
 use Tests\TestCase;
 
@@ -44,6 +46,34 @@ class SecurityEventLoggingTest extends TestCase
 
         $this->assertSame(0, Activity::inLog('security')->count());
         $this->assertSame(1, Activity::inLog('http')->count());
+    }
+
+    public function test_a_cancelled_password_update_is_not_recorded_as_a_change(): void
+    {
+        $user = User::factory()->create();
+        User::updating(fn () => false);
+
+        try {
+            $this->actingAs($user)->put(route('user-password.update'), [
+                'current_password' => 'password',
+                'password' => 'new-secret-value',
+                'password_confirmation' => 'new-secret-value',
+            ])->assertStatus(500);
+        } finally {
+            User::flushEventListeners();
+        }
+
+        $this->assertSame(0, Activity::inLog('security')->count());
+        $this->assertTrue(password_verify('password', $user->fresh()->password));
+    }
+
+    public function test_the_request_id_cannot_be_overridden_by_the_caller(): void
+    {
+        Context::add('request_id', 'REAL-ID');
+
+        app(LogSecurityEvent::class)('password.changed', null, ['request_id' => 'FORGED-ID']);
+
+        $this->assertSame('REAL-ID', Activity::inLog('security')->sole()->getProperty('request_id'));
     }
 
     public function test_a_logging_failure_does_not_undo_the_password_change(): void
