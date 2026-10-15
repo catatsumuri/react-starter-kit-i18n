@@ -30,6 +30,25 @@ class LogWriteRequestsTest extends TestCase
         $this->assertStringNotContainsString('new-secret-value', json_encode($activity->properties));
     }
 
+    public function test_logout_keeps_the_acting_user_as_causer(): void
+    {
+        $user = User::factory()->create();
+
+        $this->actingAs($user)->post(route('logout'));
+
+        $this->assertSame($user->id, Activity::inLog('http')->sole()->causer_id);
+    }
+
+    public function test_account_deletion_keeps_the_acting_user_as_causer(): void
+    {
+        $user = User::factory()->create();
+
+        $this->actingAs($user)->delete(route('profile.destroy'), ['password' => 'password']);
+
+        $this->assertModelMissing($user);
+        $this->assertSame($user->id, Activity::inLog('http')->sole()->causer_id);
+    }
+
     public function test_read_requests_are_not_logged(): void
     {
         $this->get(route('home'));
