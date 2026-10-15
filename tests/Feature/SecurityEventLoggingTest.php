@@ -132,6 +132,57 @@ class SecurityEventLoggingTest extends TestCase
         $this->assertSame(0, Activity::inLog('security')->count());
     }
 
+    public function test_changing_the_email_records_a_security_event_without_email_values(): void
+    {
+        $user = User::factory()->create(['email' => 'old@example.com']);
+
+        $this->actingAs($user)->patch(route('profile.update'), [
+            'name' => $user->name,
+            'email' => 'new@example.com',
+        ]);
+
+        $event = Activity::inLog('security')->sole();
+        $http = Activity::inLog('http')->sole();
+
+        $this->assertSame('email.changed', $event->description);
+        $this->assertTrue($event->subject->is($user));
+        $this->assertSame($http->getProperty('request_id'), $event->getProperty('request_id'));
+        $this->assertStringNotContainsString('example.com', json_encode($event->properties));
+        $this->assertSame('new@example.com', $user->fresh()->email);
+        $this->assertNull($user->fresh()->email_verified_at);
+    }
+
+    public function test_updating_only_the_name_does_not_record_an_email_change(): void
+    {
+        $user = User::factory()->create();
+
+        $this->actingAs($user)->patch(route('profile.update'), [
+            'name' => 'Another Name',
+            'email' => $user->email,
+        ]);
+
+        $this->assertSame('Another Name', $user->fresh()->name);
+        $this->assertSame(0, Activity::inLog('security')->count());
+    }
+
+    public function test_a_cancelled_profile_update_is_not_recorded_as_an_email_change(): void
+    {
+        $user = User::factory()->create(['email' => 'old@example.com']);
+        User::updating(fn () => false);
+
+        try {
+            $this->actingAs($user)->patch(route('profile.update'), [
+                'name' => $user->name,
+                'email' => 'new@example.com',
+            ])->assertStatus(500);
+        } finally {
+            User::flushEventListeners();
+        }
+
+        $this->assertSame('old@example.com', $user->fresh()->email);
+        $this->assertSame(0, Activity::inLog('security')->count());
+    }
+
     public function test_a_logging_failure_does_not_undo_the_password_change(): void
     {
         $user = User::factory()->create();
