@@ -25,7 +25,7 @@ class LogSecurityEvent
         try {
             $logger = activity(self::LOG_NAME)
                 ->event($event)
-                ->withProperties($properties + ['request_id' => Context::get('request_id')]);
+                ->withProperties([...$properties, 'request_id' => Context::get('request_id')]);
 
             if ($subject !== null) {
                 $logger->performedOn($subject);

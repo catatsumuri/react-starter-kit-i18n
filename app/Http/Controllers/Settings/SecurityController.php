@@ -11,6 +11,7 @@ use Illuminate\Validation\Rules\Password;
 use Inertia\Inertia;
 use Inertia\Response;
 use Laravel\Fortify\Features;
+use RuntimeException;
 
 class SecurityController extends Controller
 {
@@ -62,9 +63,13 @@ class SecurityController extends Controller
      */
     public function update(PasswordUpdateRequest $request, LogSecurityEvent $logSecurityEvent): RedirectResponse
     {
-        $request->user()->update([
+        $updated = $request->user()->update([
             'password' => $request->password,
         ]);
+
+        if (! $updated) {
+            throw new RuntimeException('The password update was cancelled.');
+        }
 
         $logSecurityEvent('password.changed', $request->user());
 
