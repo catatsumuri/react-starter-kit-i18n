@@ -56,13 +56,17 @@ class ProfileController extends Controller
     /**
      * Delete the user's profile.
      */
-    public function destroy(ProfileDeleteRequest $request): RedirectResponse
+    public function destroy(ProfileDeleteRequest $request, LogSecurityEvent $logSecurityEvent): RedirectResponse
     {
         $user = $request->user();
 
         Auth::logout();
 
-        $user->delete();
+        if (! $user->delete()) {
+            throw new RuntimeException('The account deletion was cancelled.');
+        }
+
+        $logSecurityEvent('account.deleted', properties: ['user_id' => $user->getKey()], causer: $user);
 
         $request->session()->invalidate();
         $request->session()->regenerateToken();

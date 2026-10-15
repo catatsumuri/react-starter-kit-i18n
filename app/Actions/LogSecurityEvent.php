@@ -19,8 +19,9 @@ class LogSecurityEvent
 
     /**
      * @param  array<string, mixed>  $properties  Never pass secrets or raw user input.
+     * @param  Model|null  $causer  Set when the acting user is no longer resolvable from the session.
      */
-    public function __invoke(string $event, ?Model $subject = null, array $properties = []): void
+    public function __invoke(string $event, ?Model $subject = null, array $properties = [], ?Model $causer = null): void
     {
         try {
             $logger = activity(self::LOG_NAME)
@@ -29,6 +30,10 @@ class LogSecurityEvent
 
             if ($subject !== null) {
                 $logger->performedOn($subject);
+            }
+
+            if ($causer !== null) {
+                $logger->causedBy($causer);
             }
 
             $logger->log($event);
