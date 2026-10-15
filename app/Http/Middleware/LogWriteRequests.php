@@ -10,12 +10,15 @@ class LogWriteRequests
 {
     public function handle(Request $request, Closure $next): Response
     {
+        $request->attributes->set('audit_user', $request->user());
+
         return $next($request);
     }
 
     /**
      * Record write requests after the response is sent. Only field names are
-     * stored, never values.
+     * stored, never values. The causer falls back to the user seen before the
+     * request ran, so logout and account deletion still identify who acted.
      */
     public function terminate(Request $request, Response $response): void
     {
@@ -26,6 +29,7 @@ class LogWriteRequests
         $status = $response->getStatusCode();
 
         activity('http')
+            ->causedBy($request->user() ?? $request->attributes->get('audit_user'))
             ->event($status >= 400 ? 'http.write_failed' : 'http.write')
             ->withProperties([
                 'method' => $request->method(),
