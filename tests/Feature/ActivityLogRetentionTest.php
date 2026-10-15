@@ -33,7 +33,7 @@ class ActivityLogRetentionTest extends TestCase
 
     public function test_invalid_retention_days_do_not_schedule_cleanup(): void
     {
-        foreach (['abc', '0', '-5', ''] as $invalid) {
+        foreach (['abc', '0', '-5', '', 'true', 'false', 'null'] as $invalid) {
             $_ENV['AUDIT_HTTP_RETENTION_DAYS'] = $_SERVER['AUDIT_HTTP_RETENTION_DAYS'] = $invalid;
             $this->refreshApplication();
 
