@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cache;
 use PragmaRX\Google2FA\Google2FA;
 use Spatie\Activitylog\Models\Activity;
 use Tests\TestCase;
@@ -117,6 +118,18 @@ class MfaSecurityEventLoggingTest extends TestCase
         }
 
         $this->assertNull($user->fresh()->two_factor_confirmed_at);
+        $this->assertSame(0, Activity::inLog('security')->count());
+    }
+
+    public function test_confirming_an_already_confirmed_two_factor_is_not_recorded_again(): void
+    {
+        $user = $this->enableAndConfirmTwoFactor();
+        Activity::inLog('security')->delete();
+
+        Cache::flush();
+        $code = app(Google2FA::class)->getCurrentOtp(decrypt($user->two_factor_secret));
+        $this->actingAsPasswordConfirmed($user)->post('/user/confirmed-two-factor-authentication', ['code' => $code]);
+
         $this->assertSame(0, Activity::inLog('security')->count());
     }
 
