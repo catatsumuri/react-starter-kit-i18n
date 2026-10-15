@@ -80,6 +80,46 @@ class MfaSecurityEventLoggingTest extends TestCase
         $this->assertSame(0, Activity::inLog('security')->count());
     }
 
+    public function test_cancelled_user_saves_do_not_record_mfa_events(): void
+    {
+        $user = $this->enableAndConfirmTwoFactor();
+        Activity::inLog('security')->delete();
+        $codesBefore = $user->recoveryCodes();
+
+        User::updating(fn () => false);
+
+        try {
+            $this->actingAsPasswordConfirmed($user)->post('/user/two-factor-recovery-codes');
+            $this->actingAsPasswordConfirmed($user)->delete('/user/two-factor-authentication');
+        } finally {
+            User::flushEventListeners();
+        }
+
+        $fresh = $user->fresh();
+
+        $this->assertSame($codesBefore, $fresh->recoveryCodes());
+        $this->assertNotNull($fresh->two_factor_confirmed_at);
+        $this->assertSame(0, Activity::inLog('security')->count());
+    }
+
+    public function test_a_cancelled_confirmation_save_does_not_record_mfa_enabled(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAsPasswordConfirmed($user)->post('/user/two-factor-authentication');
+        $code = app(Google2FA::class)->getCurrentOtp(decrypt($user->fresh()->two_factor_secret));
+
+        User::updating(fn () => false);
+
+        try {
+            $this->actingAsPasswordConfirmed($user)->post('/user/confirmed-two-factor-authentication', ['code' => $code]);
+        } finally {
+            User::flushEventListeners();
+        }
+
+        $this->assertNull($user->fresh()->two_factor_confirmed_at);
+        $this->assertSame(0, Activity::inLog('security')->count());
+    }
+
     private function actingAsPasswordConfirmed(?User $user = null): static
     {
         return $this->actingAs($user ?? User::factory()->create())

@@ -5,6 +5,7 @@ namespace App\Providers;
 use App\Actions\LogSecurityEvent;
 use App\Models\User;
 use Carbon\CarbonImmutable;
+use Closure;
 use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
@@ -41,30 +42,51 @@ class AppServiceProvider extends ServiceProvider
      */
     protected function configureSecurityEventLogging(): void
     {
-        $record = function (object $event, string $name, array $properties = []): void {
-            if ($event->user instanceof User) {
-                app(LogSecurityEvent::class)($name, $event->user, $properties);
+        $record = function (object $event, string $name, ?Closure $isStored = null, array $properties = []): void {
+            $user = $event->user;
+
+            if (! $user instanceof User) {
+                return;
             }
+
+            if ($isStored !== null && ! $isStored($user, $user->fresh())) {
+                return;
+            }
+
+            app(LogSecurityEvent::class)($name, $user, $properties);
         };
 
         Event::listen(PasswordReset::class, fn (PasswordReset $event) => $record($event, 'password.reset'));
 
+        /*
+         * Fortify dispatches the two-factor events even when the underlying save
+         * was cancelled, so each one is checked against the stored row.
+         */
         Event::listen(TwoFactorAuthenticationEnabled::class, function (TwoFactorAuthenticationEnabled $event) use ($record): void {
             if (! Fortify::confirmsTwoFactorAuthentication()) {
-                $record($event, 'mfa.enabled');
+                $record($event, 'mfa.enabled', fn (User $user, ?User $stored) => $stored?->two_factor_secret === $user->two_factor_secret);
             }
         });
 
-        Event::listen(TwoFactorAuthenticationConfirmed::class, fn (TwoFactorAuthenticationConfirmed $event) => $record($event, 'mfa.enabled'));
+        Event::listen(TwoFactorAuthenticationConfirmed::class, fn (TwoFactorAuthenticationConfirmed $event) => $record(
+            $event, 'mfa.enabled', fn (User $user, ?User $stored) => $stored?->two_factor_confirmed_at !== null,
+        ));
 
         Event::listen(TwoFactorAuthenticationDisabled::class, function (TwoFactorAuthenticationDisabled $event) use ($record): void {
             $wasActive = ! Fortify::confirmsTwoFactorAuthentication()
                 || isset($event->user->getPrevious()['two_factor_confirmed_at']);
 
-            $record($event, 'mfa.disabled', ['was_active' => $wasActive]);
+            $record(
+                $event, 'mfa.disabled',
+                fn (User $user, ?User $stored) => $stored !== null && $stored->two_factor_secret === null,
+                ['was_active' => $wasActive],
+            );
         });
 
-        Event::listen(RecoveryCodesGenerated::class, fn (RecoveryCodesGenerated $event) => $record($event, 'mfa.recovery_codes.regenerated'));
+        Event::listen(RecoveryCodesGenerated::class, fn (RecoveryCodesGenerated $event) => $record(
+            $event, 'mfa.recovery_codes.regenerated',
+            fn (User $user, ?User $stored) => $stored?->two_factor_recovery_codes === $user->two_factor_recovery_codes,
+        ));
     }
 
     /**
