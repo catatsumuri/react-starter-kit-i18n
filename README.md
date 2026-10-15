@@ -11,7 +11,7 @@ A fork of the official [Laravel React starter kit](https://laravel.com/docs/star
 
 ## Requirements
 
-- PHP 8.3+
+- PHP 8.4+
 - Node 20+
 - A database supported by Laravel (SQLite works for local dev)
 
