@@ -17,6 +17,8 @@ use Laravel\Fortify\Events\TwoFactorAuthenticationConfirmed;
 use Laravel\Fortify\Events\TwoFactorAuthenticationDisabled;
 use Laravel\Fortify\Events\TwoFactorAuthenticationEnabled;
 use Laravel\Fortify\Fortify;
+use Laravel\Passkeys\Events\PasskeyDeleted;
+use Laravel\Passkeys\Events\PasskeyRegistered;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -45,7 +47,7 @@ class AppServiceProvider extends ServiceProvider
         $record = function (object $event, string $name, ?Closure $stored = null, array $properties = []): void {
             $user = $event->user;
 
-            if (! $user instanceof User || ($stored !== null && ! $stored($user->getPrevious()))) {
+            if (! $user instanceof User || ($stored !== null && ! $stored($event))) {
                 return;
             }
 
@@ -62,13 +64,13 @@ class AppServiceProvider extends ServiceProvider
          */
         Event::listen(TwoFactorAuthenticationEnabled::class, function (TwoFactorAuthenticationEnabled $event) use ($record): void {
             if (! Fortify::confirmsTwoFactorAuthentication()) {
-                $record($event, 'mfa.enabled', fn (array $previous) => array_key_exists('two_factor_secret', $previous));
+                $record($event, 'mfa.enabled', fn ($event) => array_key_exists('two_factor_secret', $event->user->getPrevious()));
             }
         });
 
         Event::listen(TwoFactorAuthenticationConfirmed::class, fn (TwoFactorAuthenticationConfirmed $event) => $record(
             $event, 'mfa.enabled',
-            fn (array $previous) => array_key_exists('two_factor_confirmed_at', $previous) && $previous['two_factor_confirmed_at'] === null,
+            fn ($event) => array_key_exists('two_factor_confirmed_at', $event->user->getPrevious()) && $event->user->getPrevious()['two_factor_confirmed_at'] === null,
         ));
 
         Event::listen(TwoFactorAuthenticationDisabled::class, function (TwoFactorAuthenticationDisabled $event) use ($record): void {
@@ -77,14 +79,31 @@ class AppServiceProvider extends ServiceProvider
 
             $record(
                 $event, 'mfa.disabled',
-                fn (array $previous) => array_key_exists('two_factor_secret', $previous),
+                fn ($event) => array_key_exists('two_factor_secret', $event->user->getPrevious()),
                 ['was_active' => $wasActive],
             );
         });
 
         Event::listen(RecoveryCodesGenerated::class, fn (RecoveryCodesGenerated $event) => $record(
             $event, 'mfa.recovery_codes.regenerated',
-            fn (array $previous) => array_key_exists('two_factor_recovery_codes', $previous),
+            fn ($event) => array_key_exists('two_factor_recovery_codes', $event->user->getPrevious()),
+        ));
+
+        /*
+         * laravel/passkeys also dispatches after a cancelled create or delete, so
+         * check that the passkey row was really created or removed. Only the
+         * passkey ID is stored; the user-supplied name is not.
+         */
+        Event::listen(PasskeyRegistered::class, fn (PasskeyRegistered $event) => $record(
+            $event, 'passkey.created',
+            fn (PasskeyRegistered $event) => $event->passkey->wasRecentlyCreated,
+            ['passkey_id' => $event->passkey->getKey()],
+        ));
+
+        Event::listen(PasskeyDeleted::class, fn (PasskeyDeleted $event) => $record(
+            $event, 'passkey.deleted',
+            fn (PasskeyDeleted $event) => ! $event->passkey->exists,
+            ['passkey_id' => $event->passkey->getKey()],
         ));
     }
 
