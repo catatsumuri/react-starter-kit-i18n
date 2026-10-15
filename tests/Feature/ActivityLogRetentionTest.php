@@ -9,7 +9,7 @@ class ActivityLogRetentionTest extends TestCase
     public function test_activity_log_cleanup_is_scheduled_daily(): void
     {
         $this->artisan('schedule:list')
-            ->expectsOutputToContain('activitylog:clean')
+            ->expectsOutputToContain('activitylog:clean --force')
             ->assertSuccessful();
     }
 }
