@@ -8,4 +8,6 @@ Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
 
-Schedule::command('activitylog:clean', ['--force'])->daily();
+foreach (config('audit.retention_days') as $logName => $days) {
+    Schedule::command('activitylog:clean', [$logName, '--days' => $days, '--force'])->daily();
+}
