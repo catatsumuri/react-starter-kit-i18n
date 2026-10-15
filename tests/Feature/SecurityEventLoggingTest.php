@@ -222,6 +222,7 @@ class SecurityEventLoggingTest extends TestCase
         }
 
         $this->assertModelExists($user);
+        $this->assertAuthenticatedAs($user);
         $this->assertSame(0, Activity::inLog('security')->count());
     }
 

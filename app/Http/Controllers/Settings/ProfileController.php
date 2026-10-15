@@ -59,14 +59,19 @@ class ProfileController extends Controller
     public function destroy(ProfileDeleteRequest $request, LogSecurityEvent $logSecurityEvent): RedirectResponse
     {
         $user = $request->user();
-
-        Auth::logout();
+        $userId = $user->getKey();
 
         if (! $user->delete()) {
             throw new RuntimeException('The account deletion was cancelled.');
         }
 
-        $logSecurityEvent('account.deleted', properties: ['user_id' => $user->getKey()], causer: $user);
+        $logSecurityEvent('account.deleted', properties: ['user_id' => $userId], causer: $user);
+
+        // Logging out cycles the remember token by saving the user, which would
+        // insert the deleted row again, so drop the token from the model first.
+        $user->setRememberToken('');
+
+        Auth::logout();
 
         $request->session()->invalidate();
         $request->session()->regenerateToken();
