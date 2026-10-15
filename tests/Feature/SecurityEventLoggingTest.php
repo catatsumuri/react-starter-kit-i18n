@@ -183,6 +183,48 @@ class SecurityEventLoggingTest extends TestCase
         $this->assertSame(0, Activity::inLog('security')->count());
     }
 
+    public function test_deleting_the_account_records_the_user_id_without_a_subject(): void
+    {
+        $user = User::factory()->create();
+
+        $this->actingAs($user)->delete(route('profile.destroy'), ['password' => 'password']);
+
+        $event = Activity::inLog('security')->sole();
+        $http = Activity::inLog('http')->sole();
+
+        $this->assertModelMissing($user);
+        $this->assertSame('account.deleted', $event->description);
+        $this->assertNull($event->subject_id);
+        $this->assertSame($user->id, $event->getProperty('user_id'));
+        $this->assertSame($user->id, $event->causer_id);
+        $this->assertSame($http->getProperty('request_id'), $event->getProperty('request_id'));
+    }
+
+    public function test_a_wrong_password_does_not_delete_or_record_the_account(): void
+    {
+        $user = User::factory()->create();
+
+        $this->actingAs($user)->delete(route('profile.destroy'), ['password' => 'wrong-password']);
+
+        $this->assertModelExists($user);
+        $this->assertSame(0, Activity::inLog('security')->count());
+    }
+
+    public function test_a_cancelled_account_deletion_is_not_recorded(): void
+    {
+        $user = User::factory()->create();
+        User::deleting(fn () => false);
+
+        try {
+            $this->actingAs($user)->delete(route('profile.destroy'), ['password' => 'password'])->assertStatus(500);
+        } finally {
+            User::flushEventListeners();
+        }
+
+        $this->assertModelExists($user);
+        $this->assertSame(0, Activity::inLog('security')->count());
+    }
+
     public function test_a_logging_failure_does_not_undo_the_password_change(): void
     {
         $user = User::factory()->create();
