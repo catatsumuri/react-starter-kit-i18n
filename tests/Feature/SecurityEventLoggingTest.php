@@ -6,6 +6,7 @@ use App\Actions\LogSecurityEvent;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Context;
+use Illuminate\Support\Facades\Password;
 use Spatie\Activitylog\Models\Activity;
 use Tests\TestCase;
 
@@ -74,6 +75,61 @@ class SecurityEventLoggingTest extends TestCase
         app(LogSecurityEvent::class)('password.changed', null, ['request_id' => 'FORGED-ID']);
 
         $this->assertSame('REAL-ID', Activity::inLog('security')->sole()->getProperty('request_id'));
+    }
+
+    public function test_resetting_the_password_records_a_security_event_for_the_user(): void
+    {
+        $user = User::factory()->create();
+
+        $this->post(route('password.update'), [
+            'token' => Password::createToken($user),
+            'email' => $user->email,
+            'password' => 'new-secret-value',
+            'password_confirmation' => 'new-secret-value',
+        ])->assertRedirect(route('login'));
+
+        $event = Activity::inLog('security')->sole();
+        $http = Activity::inLog('http')->sole();
+
+        $this->assertSame('password.reset', $event->description);
+        $this->assertTrue($event->subject->is($user));
+        $this->assertNull($event->causer);
+        $this->assertSame($http->getProperty('request_id'), $event->getProperty('request_id'));
+        $this->assertTrue(password_verify('new-secret-value', $user->fresh()->password));
+    }
+
+    public function test_a_failed_password_reset_does_not_record_a_security_event(): void
+    {
+        $user = User::factory()->create();
+
+        $this->post(route('password.update'), [
+            'token' => 'invalid-token',
+            'email' => $user->email,
+            'password' => 'new-secret-value',
+            'password_confirmation' => 'new-secret-value',
+        ]);
+
+        $this->assertSame(0, Activity::inLog('security')->count());
+        $this->assertTrue(password_verify('password', $user->fresh()->password));
+    }
+
+    public function test_a_cancelled_password_reset_is_not_recorded(): void
+    {
+        $user = User::factory()->create();
+        User::updating(fn () => false);
+
+        try {
+            $this->post(route('password.update'), [
+                'token' => Password::createToken($user),
+                'email' => $user->email,
+                'password' => 'new-secret-value',
+                'password_confirmation' => 'new-secret-value',
+            ])->assertStatus(500);
+        } finally {
+            User::flushEventListeners();
+        }
+
+        $this->assertSame(0, Activity::inLog('security')->count());
     }
 
     public function test_a_logging_failure_does_not_undo_the_password_change(): void
