@@ -9,7 +9,9 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 foreach (config('audit.retention_days') as $logName => $days) {
-    $validDays = filter_var($days, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+    $validDays = is_int($days) || is_string($days)
+        ? filter_var($days, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]])
+        : false;
 
     if ($validDays === false) {
         report(new InvalidArgumentException("Invalid audit retention days for log [{$logName}]: cleanup is not scheduled."));
