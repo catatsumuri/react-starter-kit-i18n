@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Context;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\Response;
 use Throwable;
@@ -16,6 +17,7 @@ class LogWriteRequests
 
     public function handle(Request $request, Closure $next): Response
     {
+        Context::add('request_id', (string) Str::ulid());
         $request->attributes->set('audit_user', $request->user());
 
         return $next($request);
@@ -46,6 +48,7 @@ class LogWriteRequests
                 ->event($status >= 400 ? 'http.write_failed' : 'http.write')
                 ->withProperties([
                     'method' => $request->method(),
+                    'request_id' => Context::get('request_id'),
                     'path' => $uri,
                     'route' => $route?->getName(),
                     'fields' => array_map(

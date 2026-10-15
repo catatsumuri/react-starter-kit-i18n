@@ -87,6 +87,27 @@ class LogWriteRequestsTest extends TestCase
         $this->post(route('logout'))->assertRedirect();
     }
 
+    public function test_each_request_gets_its_own_request_id(): void
+    {
+        $user = User::factory()->create();
+
+        $this->actingAs($user)->delete(route('profile.destroy'), ['password' => 'wrong']);
+        $this->actingAs($user)->delete(route('profile.destroy'), ['password' => 'wrong']);
+
+        $ids = Activity::inLog('http')->get()->map(fn (Activity $activity) => $activity->getProperty('request_id'));
+
+        $this->assertCount(2, $ids);
+        $this->assertCount(2, $ids->unique());
+        $ids->each(fn (?string $id) => $this->assertMatchesRegularExpression('/^[0-9A-HJKMNP-TV-Z]{26}$/', (string) $id));
+    }
+
+    public function test_requests_rejected_by_authentication_still_get_a_request_id(): void
+    {
+        $this->post(route('logout'))->assertRedirect(route('login'));
+
+        $this->assertNotNull(Activity::inLog('http')->sole()->getProperty('request_id'));
+    }
+
     public function test_read_requests_are_not_logged(): void
     {
         $this->get(route('home'));
