@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Schema;
 use Spatie\Activitylog\Models\Activity;
 use Tests\TestCase;
 
@@ -50,7 +51,7 @@ class LogWriteRequestsTest extends TestCase
         $this->assertSame($user->id, Activity::inLog('http')->sole()->causer_id);
     }
 
-    public function test_secret_route_parameters_and_oversized_fields_are_not_stored_raw(): void
+    public function test_route_parameter_values_and_oversized_fields_are_not_stored(): void
     {
         Route::middleware('web')->post('/audit-probe/{token}/{item}', fn () => 'ok');
 
@@ -63,12 +64,27 @@ class LogWriteRequestsTest extends TestCase
         $stored = json_encode($activity->properties);
 
         $this->assertSame('audit-probe/{token}/{item}', $activity->getProperty('path'));
-        $this->assertSame('[masked]', $activity->getProperty('parameters')['token']);
-        $this->assertLessThanOrEqual(53, mb_strlen($activity->getProperty('parameters')['item']));
+        $this->assertArrayNotHasKey('parameters', $activity->properties->toArray());
         $this->assertLessThanOrEqual(50, count($activity->getProperty('fields')));
         foreach (['SECRETTOKEN', 'QSECRET', 'BODYSECRET'] as $secret) {
             $this->assertStringNotContainsString($secret, $stored.$activity->description);
         }
+    }
+
+    public function test_validation_failures_are_logged(): void
+    {
+        $user = User::factory()->create();
+
+        $this->actingAs($user)->putJson(route('user-password.update'), []);
+
+        $this->assertSame(422, Activity::inLog('http')->sole()->getProperty('status'));
+    }
+
+    public function test_a_logging_failure_does_not_break_the_response(): void
+    {
+        Schema::drop('activity_log');
+
+        $this->post(route('logout'))->assertRedirect();
     }
 
     public function test_read_requests_are_not_logged(): void
