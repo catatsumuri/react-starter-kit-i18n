@@ -17,7 +17,10 @@ class LogWriteRequests
 
     public function handle(Request $request, Closure $next): Response
     {
-        Context::add('request_id', (string) Str::ulid());
+        $requestId = (string) Str::ulid();
+
+        Context::add('request_id', $requestId);
+        $request->attributes->set('request_id', $requestId);
         $request->attributes->set('audit_user', $request->user());
 
         return $next($request);
@@ -30,7 +33,9 @@ class LogWriteRequests
      * The route URI template is stored instead of the raw path and route
      * parameter values are never stored, so the template and field names
      * identify the operation without leaking values. A failure to log must
-     * never affect the request, so it is reported and swallowed.
+     * never affect the request, so it is reported and swallowed. The request ID
+     * is read from the request itself, never from Context, so a request whose
+     * handle() did not run (e.g. rejected by CSRF) cannot reuse a stale ID.
      */
     public function terminate(Request $request, Response $response): void
     {
@@ -48,7 +53,7 @@ class LogWriteRequests
                 ->event($status >= 400 ? 'http.write_failed' : 'http.write')
                 ->withProperties([
                     'method' => $request->method(),
-                    'request_id' => Context::get('request_id'),
+                    'request_id' => $request->attributes->get('request_id') ?? (string) Str::ulid(),
                     'path' => $uri,
                     'route' => $route?->getName(),
                     'fields' => array_map(
