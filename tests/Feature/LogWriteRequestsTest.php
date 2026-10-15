@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\User;
+use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
@@ -85,6 +86,49 @@ class LogWriteRequestsTest extends TestCase
         Schema::drop('activity_log');
 
         $this->post(route('logout'))->assertRedirect();
+    }
+
+    public function test_each_request_gets_its_own_request_id(): void
+    {
+        $user = User::factory()->create();
+
+        $this->actingAs($user)->delete(route('profile.destroy'), ['password' => 'wrong']);
+        $this->actingAs($user)->delete(route('profile.destroy'), ['password' => 'wrong']);
+
+        $ids = Activity::inLog('http')->get()->map(fn (Activity $activity) => $activity->getProperty('request_id'));
+
+        $this->assertCount(2, $ids);
+        $this->assertCount(2, $ids->unique());
+        $ids->each(fn (?string $id) => $this->assertMatchesRegularExpression('/^[0-9A-HJKMNP-TV-Z]{26}$/', (string) $id));
+    }
+
+    public function test_requests_rejected_by_authentication_still_get_a_request_id(): void
+    {
+        $this->post(route('logout'))->assertRedirect(route('login'));
+
+        $this->assertNotNull(Activity::inLog('http')->sole()->getProperty('request_id'));
+    }
+
+    public function test_csrf_rejected_requests_get_their_own_request_id(): void
+    {
+        $this->app->bind(PreventRequestForgery::class, fn ($app) => new class($app, $app['encrypter']) extends PreventRequestForgery
+        {
+            protected function runningUnitTests()
+            {
+                return false;
+            }
+        });
+
+        $user = User::factory()->create();
+        $this->actingAs($user)->post(route('logout'), [], ['X-CSRF-TOKEN' => csrf_token()]);
+        $this->flushSession();
+        $this->post(route('login.store'), ['email' => 'a@example.com', 'password' => 'x'])->assertStatus(419);
+
+        $activities = Activity::inLog('http')->orderBy('id')->get();
+        $ids = $activities->map(fn (Activity $activity) => $activity->getProperty('request_id'));
+
+        $this->assertSame(419, $activities->last()->getProperty('status'));
+        $this->assertCount(2, $ids->filter()->unique());
     }
 
     public function test_read_requests_are_not_logged(): void

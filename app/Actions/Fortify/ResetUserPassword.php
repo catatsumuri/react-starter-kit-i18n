@@ -6,6 +6,7 @@ use App\Concerns\PasswordValidationRules;
 use App\Models\User;
 use Illuminate\Support\Facades\Validator;
 use Laravel\Fortify\Contracts\ResetsUserPasswords;
+use RuntimeException;
 
 class ResetUserPassword implements ResetsUserPasswords
 {
@@ -22,8 +23,12 @@ class ResetUserPassword implements ResetsUserPasswords
             'password' => $this->passwordRules(),
         ])->validate();
 
-        $user->forceFill([
+        $saved = $user->forceFill([
             'password' => $input['password'],
         ])->save();
+
+        if (! $saved) {
+            throw new RuntimeException('The password reset was cancelled.');
+        }
     }
 }

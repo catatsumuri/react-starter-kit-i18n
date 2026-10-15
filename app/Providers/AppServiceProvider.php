@@ -2,11 +2,23 @@
 
 namespace App\Providers;
 
+use App\Actions\LogSecurityEvent;
+use App\Models\User;
 use Carbon\CarbonImmutable;
+use Closure;
+use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
+use Laravel\Fortify\Events\RecoveryCodesGenerated;
+use Laravel\Fortify\Events\TwoFactorAuthenticationConfirmed;
+use Laravel\Fortify\Events\TwoFactorAuthenticationDisabled;
+use Laravel\Fortify\Events\TwoFactorAuthenticationEnabled;
+use Laravel\Fortify\Fortify;
+use Laravel\Passkeys\Events\PasskeyDeleted;
+use Laravel\Passkeys\Events\PasskeyRegistered;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -24,6 +36,78 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->configureDefaults();
+        $this->configureSecurityEventLogging();
+    }
+
+    /**
+     * Record successful account changes that are announced by Fortify events.
+     */
+    protected function configureSecurityEventLogging(): void
+    {
+        $saved = fn (User $user, string $key): bool => array_key_exists($key, $user->getPrevious()) && ! $user->isDirty($key);
+
+        $record = function (object $event, string $name, ?Closure $stored = null, array $properties = []): void {
+            $user = $event->user;
+
+            if (! $user instanceof User || ($stored !== null && ! $stored($event))) {
+                return;
+            }
+
+            app(LogSecurityEvent::class)($name, $user, $properties);
+        };
+
+        Event::listen(PasswordReset::class, fn (PasswordReset $event) => $record($event, 'password.reset'));
+
+        /*
+         * Fortify dispatches the two-factor events even when the underlying save
+         * was cancelled or did not change anything. Each listener checks that the
+         * attribute is among the last save's changes (previous values) and has no
+         * unsaved change left, so a cancelled save cannot reuse an earlier save's
+         * history and no extra query can fail.
+         */
+        Event::listen(TwoFactorAuthenticationEnabled::class, function (TwoFactorAuthenticationEnabled $event) use ($record, $saved): void {
+            if (! Fortify::confirmsTwoFactorAuthentication()) {
+                $record($event, 'mfa.enabled', fn ($event) => $saved($event->user, 'two_factor_secret'));
+            }
+        });
+
+        Event::listen(TwoFactorAuthenticationConfirmed::class, fn (TwoFactorAuthenticationConfirmed $event) => $record(
+            $event, 'mfa.enabled',
+            fn ($event) => $saved($event->user, 'two_factor_confirmed_at') && $event->user->getPrevious()['two_factor_confirmed_at'] === null,
+        ));
+
+        Event::listen(TwoFactorAuthenticationDisabled::class, function (TwoFactorAuthenticationDisabled $event) use ($record, $saved): void {
+            $wasActive = ! Fortify::confirmsTwoFactorAuthentication()
+                || isset($event->user->getPrevious()['two_factor_confirmed_at']);
+
+            $record(
+                $event, 'mfa.disabled',
+                fn ($event) => $saved($event->user, 'two_factor_secret'),
+                ['was_active' => $wasActive],
+            );
+        });
+
+        Event::listen(RecoveryCodesGenerated::class, fn (RecoveryCodesGenerated $event) => $record(
+            $event, 'mfa.recovery_codes.regenerated',
+            fn ($event) => $saved($event->user, 'two_factor_recovery_codes'),
+        ));
+
+        /*
+         * laravel/passkeys also dispatches after a cancelled create or delete, so
+         * check that the passkey row was really created or removed. Only the
+         * passkey ID is stored; the user-supplied name is not.
+         */
+        Event::listen(PasskeyRegistered::class, fn (PasskeyRegistered $event) => $record(
+            $event, 'passkey.created',
+            fn (PasskeyRegistered $event) => $event->passkey->wasRecentlyCreated,
+            ['passkey_id' => $event->passkey->getKey()],
+        ));
+
+        Event::listen(PasskeyDeleted::class, fn (PasskeyDeleted $event) => $record(
+            $event, 'passkey.deleted',
+            fn (PasskeyDeleted $event) => ! $event->passkey->exists,
+            ['passkey_id' => $event->passkey->getKey()],
+        ));
     }
 
     /**
