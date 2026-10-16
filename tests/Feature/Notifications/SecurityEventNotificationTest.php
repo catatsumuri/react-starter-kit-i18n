@@ -7,6 +7,7 @@ use App\Notifications\SecurityNotification;
 use App\Support\SecurityEvent;
 use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Notifications\AnonymousNotifiable;
 use Illuminate\Notifications\Events\NotificationSending;
 use Illuminate\Support\Defer\DeferredCallbackCollection;
 use Illuminate\Support\Facades\Event;
@@ -198,6 +199,104 @@ class SecurityEventNotificationTest extends TestCase
             ->assertSessionHasErrors('password');
 
         Notification::assertNothingSent();
+    }
+
+    public function test_email_change_notifies_the_old_address(): void
+    {
+        Notification::fake();
+        $user = User::factory()->create(['email' => 'old@example.com']);
+
+        $this->actingAs($user)
+            ->patch(route('profile.update'), [
+                'name' => $user->name,
+                'email' => 'new@example.com',
+                'current_password' => 'password',
+            ])
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame('new@example.com', $user->fresh()->email);
+        Notification::assertSentOnDemand(
+            SecurityNotification::class,
+            fn ($notification, $channels, $notifiable) => $notification->event === SecurityEvent::EmailChanged
+                && $notifiable->routes['mail'] === 'old@example.com',
+        );
+        Notification::assertSentOnDemandTimes(SecurityNotification::class, 1);
+    }
+
+    public function test_email_change_with_wrong_password_does_not_notify(): void
+    {
+        Notification::fake();
+        $user = User::factory()->create(['email' => 'old@example.com']);
+
+        $this->actingAs($user)
+            ->patch(route('profile.update'), [
+                'name' => $user->name,
+                'email' => 'new@example.com',
+                'current_password' => 'wrong-password',
+            ])
+            ->assertSessionHasErrors('current_password');
+
+        $this->assertSame('old@example.com', $user->fresh()->email);
+        Notification::assertNothingSent();
+    }
+
+    public function test_name_only_change_does_not_notify(): void
+    {
+        Notification::fake();
+        $user = User::factory()->create(['email' => 'old@example.com']);
+
+        $this->actingAs($user)
+            ->patch(route('profile.update'), [
+                'name' => 'New Name',
+                'email' => 'old@example.com',
+            ])
+            ->assertSessionHasNoErrors();
+
+        Notification::assertNothingSent();
+    }
+
+    public function test_email_change_succeeds_even_when_notification_fails(): void
+    {
+        $user = User::factory()->create(['email' => 'old@example.com']);
+        Event::listen(NotificationSending::class, fn () => throw new RuntimeException('mail down'));
+
+        $this->actingAs($user)
+            ->patch(route('profile.update'), [
+                'name' => $user->name,
+                'email' => 'new@example.com',
+                'current_password' => 'password',
+            ])
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame('new@example.com', $user->fresh()->email);
+    }
+
+    public function test_email_change_notification_does_not_reveal_the_new_address(): void
+    {
+        Notification::fake();
+        $user = User::factory()->create(['email' => 'old@example.com']);
+
+        $this->actingAs($user)
+            ->patch(route('profile.update'), [
+                'name' => $user->name,
+                'email' => 'new-address@example.com',
+                'current_password' => 'password',
+            ])
+            ->assertSessionHasNoErrors();
+
+        Notification::assertSentOnDemand(
+            SecurityNotification::class,
+            function (SecurityNotification $notification) {
+                $mail = $notification->toMail(new AnonymousNotifiable);
+                $rendered = $mail->subject.' '.implode(' ', $mail->introLines).' '.implode(' ', $mail->outroLines);
+
+                $this->assertStringNotContainsString('new-address', $rendered);
+                $this->assertStringNotContainsString('token', strtolower($rendered));
+                $this->assertEmpty($mail->actionUrl ?? null);
+
+                return true;
+            },
+        );
     }
 
     public function test_notification_mail_does_not_contain_secrets(): void
