@@ -3,10 +3,12 @@ import { Form, Head, setLayoutProps, usePage } from '@inertiajs/react';
 import { Link } from '@inertiajs/react';
 /* @end-chisel-email-verification */
 import { lang } from '@erag/lang-sync-inertia/react';
+import { useState } from 'react';
 import ProfileController from '@/actions/App/Http/Controllers/Settings/ProfileController';
 import DeleteUser from '@/components/delete-user';
 import Heading from '@/components/heading';
 import InputError from '@/components/input-error';
+import PasswordInput from '@/components/password-input';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -33,6 +35,8 @@ export default function Profile(
 ) {
     const { auth } = usePage<PageProps>().props;
     const { __ } = lang();
+    const [isEmailChanged, setIsEmailChanged] = useState(false);
+    const [passwordInputKey, setPasswordInputKey] = useState(0);
 
     setLayoutProps({
         breadcrumbs: [
@@ -61,6 +65,10 @@ export default function Profile(
                     options={{
                         preserveScroll: true,
                     }}
+                    resetOnSuccess={['current_password']}
+                    resetOnError={['current_password']}
+                    onSuccess={() => setIsEmailChanged(false)}
+                    onError={() => setPasswordInputKey((key) => key + 1)}
                     className="space-y-6"
                 >
                     {({ processing, errors }) => (
@@ -94,6 +102,12 @@ export default function Profile(
                                     type="email"
                                     className="mt-1 block w-full"
                                     defaultValue={auth.user.email}
+                                    onChange={(event) =>
+                                        setIsEmailChanged(
+                                            event.target.value !==
+                                                auth.user.email,
+                                        )
+                                    }
                                     name="email"
                                     required
                                     autoComplete="username"
@@ -105,6 +119,35 @@ export default function Profile(
                                     message={errors.email}
                                 />
                             </div>
+
+                            {isEmailChanged && (
+                                <div className="grid gap-2">
+                                    <Label htmlFor="current_password">
+                                        {__('Current password')}
+                                    </Label>
+
+                                    <PasswordInput
+                                        key={passwordInputKey}
+                                        id="current_password"
+                                        className="mt-1 block w-full"
+                                        name="current_password"
+                                        required
+                                        autoComplete="current-password"
+                                        placeholder={__('Current password')}
+                                    />
+
+                                    <p className="text-sm text-muted-foreground">
+                                        {__(
+                                            'Enter your current password to confirm the email address change.',
+                                        )}
+                                    </p>
+
+                                    <InputError
+                                        className="mt-2"
+                                        message={errors.current_password}
+                                    />
+                                </div>
+                            )}
 
                             {/* @chisel-email-verification */}
                             {mustVerifyEmail &&
