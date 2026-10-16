@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Settings;
 
+use App\Actions\LogSecurityEvent;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Settings\ProfileDeleteRequest;
 use App\Http\Requests\Settings\ProfileUpdateRequest;
@@ -11,6 +12,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
 use Inertia\Response;
+use RuntimeException;
 
 class ProfileController extends Controller
 {
@@ -28,15 +30,23 @@ class ProfileController extends Controller
     /**
      * Update the user's profile information.
      */
-    public function update(ProfileUpdateRequest $request): RedirectResponse
+    public function update(ProfileUpdateRequest $request, LogSecurityEvent $logSecurityEvent): RedirectResponse
     {
         $request->user()->fill($request->validated());
 
-        if ($request->user()->isDirty('email')) {
+        $emailChanged = $request->user()->isDirty('email');
+
+        if ($emailChanged) {
             $request->user()->email_verified_at = null;
         }
 
-        $request->user()->save();
+        if (! $request->user()->save()) {
+            throw new RuntimeException('The profile update was cancelled.');
+        }
+
+        if ($emailChanged) {
+            $logSecurityEvent('email.changed', $request->user());
+        }
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Profile updated.')]);
 
@@ -46,13 +56,22 @@ class ProfileController extends Controller
     /**
      * Delete the user's profile.
      */
-    public function destroy(ProfileDeleteRequest $request): RedirectResponse
+    public function destroy(ProfileDeleteRequest $request, LogSecurityEvent $logSecurityEvent): RedirectResponse
     {
         $user = $request->user();
+        $userId = $user->getKey();
+
+        if (! $user->delete()) {
+            throw new RuntimeException('The account deletion was cancelled.');
+        }
+
+        $logSecurityEvent('account.deleted', properties: ['user_id' => $userId], causer: $user);
+
+        // Logging out cycles the remember token by saving the user, which would
+        // insert the deleted row again, so drop the token from the model first.
+        $user->setRememberToken('');
 
         Auth::logout();
-
-        $user->delete();
 
         $request->session()->invalidate();
         $request->session()->regenerateToken();
