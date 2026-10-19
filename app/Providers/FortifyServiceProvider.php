@@ -106,6 +106,12 @@ class FortifyServiceProvider extends ServiceProvider
             return Limit::perMinute(5)->by($throttleKey);
         });
 
+        RateLimiter::for('session-revocation', function (Request $request) {
+            return Limit::perMinute(10)->by(
+                ($request->user()?->getAuthIdentifier() ?? 'guest').'|'.$request->ip(),
+            );
+        });
+
         /* @chisel-passkeys */
         RateLimiter::for('passkeys', function (Request $request) {
             return Limit::perMinute(10)->by(
