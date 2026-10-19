@@ -157,11 +157,19 @@ class ManageDatabaseSessions
         ];
     }
 
+    /**
+     * Fingerprints cannot be reversed, so every candidate is hashed in turn. Only
+     * active sessions are candidates (the same ones the session list shows) and
+     * rows are streamed rather than loaded at once.
+     */
     private function sessionIdForFingerprint(User $user, string $fingerprint): ?string
     {
         return $this->connection()
             ->table($this->table())
             ->where('user_id', $user->getAuthIdentifier())
+            ->where('last_activity', '>=', $this->activeSince())
+            ->select('id')
+            ->cursor()
             ->pluck('id')
             ->first(function (string $sessionId) use ($user, $fingerprint): bool {
                 return hash_equals($this->fingerprint($user, $sessionId), $fingerprint);

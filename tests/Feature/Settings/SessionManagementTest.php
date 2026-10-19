@@ -195,6 +195,17 @@ class SessionManagementTest extends TestCase
         $this->assertAuthenticatedAs($user);
     }
 
+    public function test_only_active_sessions_can_be_revoked_individually(): void
+    {
+        $user = User::factory()->create();
+        $this->storeSession('expired-session', $user, lastActivity: now()->subHours(3)->timestamp);
+        $sessions = app(ManageDatabaseSessions::class);
+
+        $revoked = $sessions->revoke($user, 'current-session', $sessions->fingerprint($user, 'expired-session'));
+
+        $this->assertFalse($revoked);
+    }
+
     public function test_revoking_other_sessions_preserves_the_supplied_current_session(): void
     {
         $user = User::factory()->create();
