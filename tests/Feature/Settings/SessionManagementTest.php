@@ -634,6 +634,62 @@ class SessionManagementTest extends TestCase
         $this->asClient($current['cookie'])->get(route('dashboard'))->assertOk();
     }
 
+    public function test_revoking_one_session_also_ends_remember_me_logins_so_it_cannot_come_back(): void
+    {
+        $user = User::factory()->create();
+        $current = $this->signIn($user);
+        $attacker = $this->signInRemembered($user);
+        $originalToken = $user->fresh()->remember_token;
+
+        $this->confirmPassword($current['cookie']);
+        $this->asClient($current['cookie'])
+            ->delete(route('sessions.destroy', app(ManageDatabaseSessions::class)->fingerprint($user, $attacker['id'])))
+            ->assertRedirect();
+
+        $this->asClient($attacker['cookie'])->get(route('dashboard'))->assertRedirect(route('login'));
+        $this->asClient(null, $attacker['remember'])->get(route('dashboard'))->assertRedirect(route('login'));
+        $this->assertNotSame($originalToken, $user->fresh()->remember_token);
+        $this->asClient($current['cookie'])->get(route('dashboard'))->assertOk();
+    }
+
+    public function test_revoking_an_unknown_or_foreign_session_does_not_touch_the_remember_token(): void
+    {
+        $user = User::factory()->create();
+        $otherUser = User::factory()->create();
+        $current = $this->signIn($user);
+        $this->storeSession('foreign-session', $otherUser);
+        $originalToken = $user->fresh()->remember_token;
+        $otherToken = $otherUser->fresh()->remember_token;
+        $this->confirmPassword($current['cookie']);
+
+        foreach (['unknown', app(ManageDatabaseSessions::class)->fingerprint($otherUser, 'foreign-session')] as $fingerprint) {
+            $this->asClient($current['cookie'])->delete(route('sessions.destroy', $fingerprint))->assertNotFound();
+        }
+
+        $this->assertSame($originalToken, $user->fresh()->remember_token);
+        $this->assertSame($otherToken, $otherUser->fresh()->remember_token);
+    }
+
+    public function test_failing_to_reset_the_remember_token_keeps_the_session_when_revoking_one(): void
+    {
+        $user = User::factory()->create();
+        $current = $this->signIn($user);
+        $this->storeSession('other-session', $user);
+        $this->confirmPassword($current['cookie']);
+
+        $this->partialMock(ManageDatabaseSessions::class, function (MockInterface $mock): void {
+            $mock->shouldReceive('resetRememberToken')->andThrow(new RuntimeException('Users unavailable'));
+        });
+
+        $this->asClient($current['cookie'])
+            ->delete(route('sessions.destroy', app(ManageDatabaseSessions::class)->fingerprint($user, 'other-session')))
+            ->assertRedirect()
+            ->assertSessionHas('inertia.flash_data.toast.type', 'error');
+
+        $this->assertDatabaseHas('sessions', ['id' => 'other-session']);
+        $this->asClient($current['cookie'])->get(route('dashboard'))->assertOk();
+    }
+
     public function test_revoking_all_sessions_also_invalidates_remember_me_cookies(): void
     {
         $user = User::factory()->create();

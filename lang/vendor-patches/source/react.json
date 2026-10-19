@@ -36,7 +36,7 @@
     "Sessions are temporarily unavailable. Please try again.": "Sessions are temporarily unavailable. Please try again.",
     "Sign out other browsers or every browser connected to your account.": "Sign out other browsers or every browser connected to your account.",
     "There are no other active sessions.": "There are no other active sessions.",
-    "This removes the selected session. A browser that kept you signed in with \"Remember me\" can sign in again. If you suspect someone else has access, use \"Revoke other sessions\" instead.": "This removes the selected session. A browser that kept you signed in with \"Remember me\" can sign in again. If you suspect someone else has access, use \"Revoke other sessions\" instead.",
+    "This removes the selected session and ends \"Remember me\" sign-ins on every browser. Browsers with an active session stay signed in.": "This removes the selected session and ends \"Remember me\" sign-ins on every browser. Browsers with an active session stay signed in.",
     "Unknown": "Unknown",
     "Unknown browser": "Unknown browser",
     "Warning": "Warning",

@@ -74,6 +74,10 @@ class ManageDatabaseSessions
             return false;
         }
 
+        // A remember me cookie can recreate the session just revoked, and the
+        // token is shared by every browser, so it is rotated here as well.
+        $this->resetRememberToken($user);
+
         return $this->connection()
             ->table($this->table())
             ->where('user_id', $user->getAuthIdentifier())

@@ -36,7 +36,7 @@
     "Sessions are temporarily unavailable. Please try again.": "セッションは一時的に利用できません。もう一度お試しください。",
     "Sign out other browsers or every browser connected to your account.": "アカウントに接続している他のブラウザー、またはすべてのブラウザーからログアウトします。",
     "There are no other active sessions.": "他のアクティブなセッションはありません。",
-    "This removes the selected session. A browser that kept you signed in with \"Remember me\" can sign in again. If you suspect someone else has access, use \"Revoke other sessions\" instead.": "選択したセッションを削除します。「ログイン状態を保持する」でログインを維持しているブラウザーは、再びログインできます。他の人にアクセスされた疑いがある場合は、代わりに「他のセッションを失効」を使ってください。",
+    "This removes the selected session and ends \"Remember me\" sign-ins on every browser. Browsers with an active session stay signed in.": "選択したセッションを削除し、「ログイン状態を保持する」による自動ログインをすべてのブラウザーで無効にします。現在ログイン中のブラウザーはそのまま使えます。",
     "Unknown": "不明",
     "Unknown browser": "不明なブラウザー",
     "Windows": "Windows",
