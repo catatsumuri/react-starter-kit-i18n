@@ -25,11 +25,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('security.edit');
 
     /* @chisel-password-confirmation */
-    Route::get('settings/sessions', [SessionController::class, 'index'])
-        ->name('sessions.index');
+    Route::middleware(RequirePassword::using(passwordTimeoutSeconds: 900))->group(function () {
+        Route::get('settings/sessions', [SessionController::class, 'index'])
+            ->name('sessions.index');
 
-    Route::middleware([RequirePassword::using(passwordTimeoutSeconds: 900), 'throttle:session-revocation'])
-        ->group(function () {
+        Route::middleware('throttle:session-revocation')->group(function () {
             Route::delete('settings/sessions/all', [SessionController::class, 'destroyAll'])
                 ->name('sessions.destroy-all');
             Route::delete('settings/sessions', [SessionController::class, 'destroyOthers'])
@@ -37,6 +37,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::delete('settings/sessions/{fingerprint}', [SessionController::class, 'destroy'])
                 ->name('sessions.destroy');
         });
+    });
     /* @end-chisel-password-confirmation */
 
     Route::put('settings/password', [SecurityController::class, 'update'])

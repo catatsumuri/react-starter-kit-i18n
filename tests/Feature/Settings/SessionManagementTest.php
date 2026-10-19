@@ -37,6 +37,7 @@ class SessionManagementTest extends TestCase
         $this->storeSession('expired-session', $user, '203.0.113.50', 'Expired', now()->subHours(3)->timestamp);
         $this->storeSession('foreign-session', $otherUser, '203.0.113.60', 'Foreign');
 
+        $this->confirmPassword($current['cookie']);
         $this->asClient($current['cookie'])
             ->get(route('sessions.index'))
             ->assertInertia(fn (Assert $page) => $page
@@ -55,6 +56,59 @@ class SessionManagementTest extends TestCase
     {
         $this->get(route('sessions.index'))->assertRedirect(route('login'));
         $this->delete(route('sessions.destroy-others'))->assertRedirect(route('login'));
+    }
+
+    public function test_the_session_page_itself_requires_recent_password_confirmation(): void
+    {
+        $user = User::factory()->create();
+
+        $this->actingAs($user)
+            ->get(route('sessions.index'))
+            ->assertRedirect(route('password.confirm'));
+
+        foreach ([16, 60] as $minutes) {
+            $this->actingAs($user)
+                ->withSession(['auth.password_confirmed_at' => now()->subMinutes($minutes)->timestamp])
+                ->get(route('sessions.index'))
+                ->assertRedirect(route('password.confirm'));
+        }
+
+        $this->actingAs($user)
+            ->withSession(['auth.password_confirmed_at' => now()->subMinutes(14)->timestamp])
+            ->get(route('sessions.index'))
+            ->assertOk();
+    }
+
+    public function test_confirming_the_password_returns_to_the_page_and_revocation_then_needs_no_second_prompt(): void
+    {
+        $user = User::factory()->create();
+        $current = $this->signIn($user);
+        $other = $this->signIn($user);
+
+        $this->asClient($current['cookie'])
+            ->get(route('sessions.index'))
+            ->assertRedirect(route('password.confirm'));
+
+        $this->asClient($current['cookie'])
+            ->post(route('password.confirm.store'), ['password' => 'password'])
+            ->assertRedirect(route('sessions.index'));
+
+        $this->asClient($current['cookie'])->get(route('sessions.index'))->assertOk();
+        $this->asClient($current['cookie'])->delete(route('sessions.destroy-others'))->assertRedirect();
+
+        $this->asClient($other['cookie'])->get(route('dashboard'))->assertRedirect(route('login'));
+    }
+
+    public function test_viewing_the_session_page_is_not_throttled_like_revocation(): void
+    {
+        $user = User::factory()->create();
+
+        for ($attempt = 0; $attempt < 12; $attempt++) {
+            $this->actingAs($user)
+                ->withSession(['auth.password_confirmed_at' => now()->timestamp])
+                ->get(route('sessions.index'))
+                ->assertOk();
+        }
     }
 
     public function test_session_presenter_marks_the_current_session_and_masks_its_details(): void
@@ -104,6 +158,7 @@ class SessionManagementTest extends TestCase
         $this->app['session']->forgetDrivers();
 
         $this->actingAs(User::factory()->create())
+            ->withSession(['auth.password_confirmed_at' => now()->timestamp])
             ->get(route('sessions.index'))
             ->assertInertia(fn (Assert $page) => $page
                 ->component('settings/sessions')
@@ -121,6 +176,7 @@ class SessionManagementTest extends TestCase
         });
 
         $this->actingAs(User::factory()->create())
+            ->withSession(['auth.password_confirmed_at' => now()->timestamp])
             ->get(route('sessions.index'))
             ->assertInertia(fn (Assert $page) => $page
                 ->component('settings/sessions')
@@ -415,6 +471,7 @@ class SessionManagementTest extends TestCase
         $this->storeSession('secret-other-session-id', $user);
 
         $content = $this->actingAs($user)
+            ->withSession(['auth.password_confirmed_at' => now()->timestamp])
             ->get(route('sessions.index'))
             ->assertOk()
             ->getContent();
