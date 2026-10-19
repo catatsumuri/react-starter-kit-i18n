@@ -42,27 +42,19 @@ class RevokeUserSessionsCommand extends Command
             return self::FAILURE;
         }
 
-        if ($storedSessionCount === 0) {
-            try {
-                $sessions->resetRememberToken($user);
-            } catch (Throwable $exception) {
-                report($exception);
-                $this->error('Remember me logins could not be reset. No sessions were revoked.');
-
-                return self::FAILURE;
-            }
-
-            $this->info("No sessions are stored for {$user->name} ({$user->email}, ID {$user->getKey()}). Remember me logins were reset.");
-
-            return self::SUCCESS;
-        }
-
-        $message = "Revoke {$storedSessionCount} session(s) for {$user->name} ({$user->email}, ID {$user->getKey()})?";
+        $subject = "{$user->name} ({$user->email}, ID {$user->getKey()})";
+        $message = $storedSessionCount === 0
+            ? "Revoke 0 stored sessions and reset remember me logins for {$subject}?"
+            : "Revoke {$storedSessionCount} session(s) for {$subject}?";
 
         if (! $this->option('force') && ! $this->confirm($message, false)) {
             $this->warn('No sessions were revoked.');
 
             return self::SUCCESS;
+        }
+
+        if ($storedSessionCount === 0) {
+            return $this->resetRememberMeOnly($sessions, $user);
         }
 
         try {
@@ -76,6 +68,22 @@ class RevokeUserSessionsCommand extends Command
         }
 
         $this->info("Revoked {$revokedCount} session(s) for user ID {$user->getKey()}.");
+
+        return self::SUCCESS;
+    }
+
+    private function resetRememberMeOnly(ManageDatabaseSessions $sessions, User $user): int
+    {
+        try {
+            $sessions->resetRememberToken($user);
+        } catch (Throwable $exception) {
+            report($exception);
+            $this->error('Remember me logins could not be reset. No sessions were revoked.');
+
+            return self::FAILURE;
+        }
+
+        $this->info("No sessions are stored for {$user->name} ({$user->email}, ID {$user->getKey()}). Remember me logins were reset.");
 
         return self::SUCCESS;
     }

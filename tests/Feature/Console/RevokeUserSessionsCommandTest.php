@@ -120,17 +120,45 @@ class RevokeUserSessionsCommandTest extends TestCase
         $this->assertDatabaseHas('sessions', ['id' => 'guest-session']);
     }
 
-    public function test_a_user_without_stored_sessions_is_reported_without_prompting(): void
+    public function test_a_user_without_stored_sessions_still_requires_confirmation_before_remember_me_is_reset(): void
+    {
+        $user = User::factory()->create();
+        $user->forceFill(['remember_token' => 'original-token'])->save();
+
+        $this->artisan('security:revoke-sessions', ['selector' => 'id:'.$user->getKey()])
+            ->expectsConfirmation($this->emptyConfirmationQuestion($user), 'no')
+            ->expectsOutputToContain('No sessions were revoked.')
+            ->assertSuccessful();
+
+        $this->assertSame('original-token', $user->fresh()->remember_token);
+    }
+
+    public function test_confirming_for_a_user_without_stored_sessions_resets_remember_me_only(): void
     {
         $user = User::factory()->create();
         $otherUser = User::factory()->create();
+        $user->forceFill(['remember_token' => 'original-token'])->save();
         $this->storeSession('other-users-session', $otherUser);
 
         $this->artisan('security:revoke-sessions', ['selector' => 'id:'.$user->getKey()])
-            ->expectsOutputToContain('No sessions are stored for')
+            ->expectsConfirmation($this->emptyConfirmationQuestion($user), 'yes')
+            ->expectsOutputToContain('Remember me logins were reset.')
             ->assertSuccessful();
 
+        $this->assertNotSame('original-token', $user->fresh()->remember_token);
         $this->assertDatabaseHas('sessions', ['id' => 'other-users-session']);
+    }
+
+    public function test_force_skips_the_confirmation_for_a_user_without_stored_sessions(): void
+    {
+        $user = User::factory()->create();
+        $user->forceFill(['remember_token' => 'original-token'])->save();
+
+        $this->artisan('security:revoke-sessions', ['selector' => 'id:'.$user->getKey(), '--force' => true])
+            ->expectsOutputToContain('Remember me logins were reset.')
+            ->assertSuccessful();
+
+        $this->assertNotSame('original-token', $user->fresh()->remember_token);
     }
 
     public function test_revocation_signs_out_a_logged_in_browser(): void
@@ -271,6 +299,7 @@ class RevokeUserSessionsCommandTest extends TestCase
         $originalToken = $user->fresh()->remember_token;
 
         $this->artisan('security:revoke-sessions', ['selector' => 'id:'.$user->getKey()])
+            ->expectsConfirmation($this->emptyConfirmationQuestion($user), 'yes')
             ->expectsOutputToContain('No sessions are stored for')
             ->assertSuccessful();
 
@@ -308,6 +337,11 @@ class RevokeUserSessionsCommandTest extends TestCase
             ->assertFailed();
 
         $this->assertDatabaseHas('sessions', ['id' => 'session-one']);
+    }
+
+    private function emptyConfirmationQuestion(User $user): string
+    {
+        return "Revoke 0 stored sessions and reset remember me logins for {$user->name} ({$user->email}, ID {$user->getKey()})?";
     }
 
     private function confirmationQuestion(User $user, int $count): string
