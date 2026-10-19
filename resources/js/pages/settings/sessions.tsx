@@ -106,7 +106,7 @@ function OtherSession({ session }: { session: Session }) {
                     <DialogTitle>{__('Revoke this session?')}</DialogTitle>
                     <DialogDescription>
                         {__(
-                            'This browser will be signed out the next time it makes a request.',
+                            'This removes the selected session. A browser that kept you signed in with "Remember me" can sign in again. If you suspect someone else has access, use "Revoke other sessions" instead.',
                         )}
                     </DialogDescription>
                     <Form
@@ -294,7 +294,7 @@ export default function Sessions({
                                 </DialogTitle>
                                 <DialogDescription>
                                     {__(
-                                        'Every other browser will be signed out. This browser will remain signed in.',
+                                        'Every other browser will be signed out, including those signed in with "Remember me". This browser will remain signed in.',
                                     )}
                                 </DialogDescription>
                                 <Form
