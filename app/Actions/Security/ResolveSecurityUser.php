@@ -20,18 +20,31 @@ class ResolveSecurityUser
 
         return match ($type) {
             'id' => $this->byId($value),
-            'email' => User::query()->where('email', $value)->first(),
+            'email' => $this->byEmail($value),
             default => throw new InvalidArgumentException($this->formatMessage()),
         };
     }
 
     private function byId(string $value): ?User
     {
-        if (! ctype_digit($value) || (int) $value < 1) {
+        $id = ltrim($value, '0');
+
+        if (! ctype_digit($value) || $id === '' || (string) (int) $id !== $id) {
             throw new InvalidArgumentException($this->formatMessage());
         }
 
-        return User::query()->find((int) $value);
+        return User::query()->find((int) $id);
+    }
+
+    private function byEmail(string $value): ?User
+    {
+        $users = User::query()->whereRaw('lower(email) = ?', [$value])->limit(2)->get();
+
+        if ($users->count() > 1) {
+            throw new InvalidArgumentException('More than one user matches this email address. Use id:123 instead.');
+        }
+
+        return $users->first();
     }
 
     private function formatMessage(): string

@@ -5,6 +5,7 @@ namespace App\Actions\Sessions;
 use App\Models\User;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class ManageDatabaseSessions
 {
@@ -19,6 +20,15 @@ class ManageDatabaseSessions
             ->table($this->table())
             ->where('user_id', $user->getAuthIdentifier())
             ->delete();
+    }
+
+    /**
+     * Rotate the remember token so existing "remember me" cookies stop
+     * authenticating, even though they do not depend on a stored session.
+     */
+    public function resetRememberToken(User $user): void
+    {
+        $user->forceFill(['remember_token' => Str::random(60)])->save();
     }
 
     public function storedSessionCount(User $user): int

@@ -5,6 +5,7 @@ namespace Tests\Feature\Console;
 use App\Actions\Sessions\ManageDatabaseSessions;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Mockery\MockInterface;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -37,6 +38,9 @@ class RevokeUserSessionsCommandTest extends TestCase
             'zero id' => ['id:0'],
             'negative id' => ['id:-1'],
             'non numeric id' => ['id:1x'],
+            'id just above the integer range' => ['id:9223372036854775808'],
+            'id far above the integer range' => ['id:99999999999999999999999'],
+            'zero padded zero id' => ['id:000'],
         ];
     }
 
@@ -181,6 +185,7 @@ class RevokeUserSessionsCommandTest extends TestCase
         $this->mock(ManageDatabaseSessions::class, function (MockInterface $mock): void {
             $mock->shouldReceive('isAvailable')->andReturnTrue();
             $mock->shouldReceive('storedSessionCount')->andReturn(2);
+            $mock->shouldReceive('resetRememberToken')->once();
             $mock->shouldReceive('revokeAllSessions')->andThrow(new RuntimeException('Storage unavailable'));
         });
 
@@ -188,6 +193,121 @@ class RevokeUserSessionsCommandTest extends TestCase
             ->expectsOutputToContain('Session storage is unavailable. No sessions were revoked.')
             ->doesntExpectOutputToContain('Revoked')
             ->assertFailed();
+    }
+
+    public function test_the_largest_integer_id_is_a_valid_selector_for_a_missing_user(): void
+    {
+        $this->artisan('security:revoke-sessions', ['selector' => 'id:9223372036854775807', '--force' => true])
+            ->expectsOutputToContain('The specified user was not found.')
+            ->assertFailed();
+    }
+
+    public function test_a_zero_padded_id_selects_the_same_user(): void
+    {
+        $user = User::factory()->create();
+        $this->storeSession('session-one', $user);
+
+        $this->artisan('security:revoke-sessions', ['selector' => 'id:00'.$user->getKey(), '--force' => true])
+            ->assertSuccessful();
+
+        $this->assertDatabaseMissing('sessions', ['id' => 'session-one']);
+    }
+
+    public function test_an_email_stored_with_mixed_case_is_found_regardless_of_the_selector_case(): void
+    {
+        $user = User::factory()->create(['email' => 'Mixed.Case@Example.com']);
+        $this->storeSession('session-one', $user);
+
+        $this->artisan('security:revoke-sessions', ['selector' => 'email:MIXED.case@example.COM', '--force' => true])
+            ->expectsOutputToContain('Revoked 1 session(s) for user ID '.$user->getKey().'.')
+            ->assertSuccessful();
+
+        $this->assertDatabaseMissing('sessions', ['id' => 'session-one']);
+    }
+
+    public function test_an_email_matching_several_users_is_refused_without_revoking_anything(): void
+    {
+        $first = User::factory()->create(['email' => 'twin@example.com']);
+        $second = User::factory()->create(['email' => 'Twin@Example.com']);
+        $this->storeSession('first-session', $first);
+        $this->storeSession('second-session', $second);
+
+        $this->artisan('security:revoke-sessions', ['selector' => 'email:twin@example.com', '--force' => true])
+            ->expectsOutputToContain('More than one user matches')
+            ->assertFailed();
+
+        $this->assertDatabaseHas('sessions', ['id' => 'first-session']);
+        $this->assertDatabaseHas('sessions', ['id' => 'second-session']);
+    }
+
+    public function test_revocation_also_invalidates_remember_me_cookies(): void
+    {
+        $user = User::factory()->create();
+        $bystander = User::factory()->create();
+        $remembered = $this->signInRemembered($user);
+        $bystanderRemembered = $this->signInRemembered($bystander);
+        $originalToken = $user->fresh()->remember_token;
+        $bystanderToken = $bystander->fresh()->remember_token;
+
+        $this->assertNotEmpty($originalToken);
+        $this->asClient(null, $remembered)->get(route('dashboard'))->assertOk();
+
+        $this->artisan('security:revoke-sessions', ['selector' => 'id:'.$user->getKey(), '--force' => true])
+            ->assertSuccessful();
+
+        $this->assertDatabaseMissing('sessions', ['user_id' => $user->id]);
+        $this->asClient(null, $remembered)->get(route('dashboard'))->assertRedirect(route('login'));
+        $this->assertNotSame($originalToken, $user->fresh()->remember_token);
+
+        $this->asClient(null, $bystanderRemembered)->get(route('dashboard'))->assertOk();
+        $this->assertSame($bystanderToken, $bystander->fresh()->remember_token);
+    }
+
+    public function test_remember_me_cookies_are_invalidated_even_when_no_session_row_is_stored(): void
+    {
+        $user = User::factory()->create();
+        $remembered = $this->signInRemembered($user);
+        DB::table('sessions')->where('user_id', $user->id)->delete();
+        $originalToken = $user->fresh()->remember_token;
+
+        $this->artisan('security:revoke-sessions', ['selector' => 'id:'.$user->getKey()])
+            ->expectsOutputToContain('No sessions are stored for')
+            ->assertSuccessful();
+
+        $this->assertNotSame($originalToken, $user->fresh()->remember_token);
+        $this->asClient(null, $remembered)->get(route('dashboard'))->assertRedirect(route('login'));
+    }
+
+    public function test_declining_the_confirmation_keeps_remember_me_cookies_valid(): void
+    {
+        $user = User::factory()->create();
+        $remembered = $this->signInRemembered($user);
+        $originalToken = $user->fresh()->remember_token;
+        $count = DB::table('sessions')->where('user_id', $user->id)->count();
+
+        $this->artisan('security:revoke-sessions', ['selector' => 'id:'.$user->getKey()])
+            ->expectsConfirmation($this->confirmationQuestion($user, $count), 'no')
+            ->assertSuccessful();
+
+        $this->assertSame($originalToken, $user->fresh()->remember_token);
+        $this->asClient(null, $remembered)->get(route('dashboard'))->assertOk();
+    }
+
+    public function test_a_failure_to_reset_the_remember_token_is_reported_as_a_failure(): void
+    {
+        $user = User::factory()->create();
+        $this->storeSession('session-one', $user);
+
+        User::updating(function (): bool {
+            throw new RuntimeException('Users unavailable');
+        });
+
+        $this->artisan('security:revoke-sessions', ['selector' => 'id:'.$user->getKey(), '--force' => true])
+            ->expectsOutputToContain('No sessions were revoked.')
+            ->doesntExpectOutputToContain('Revoked')
+            ->assertFailed();
+
+        $this->assertDatabaseHas('sessions', ['id' => 'session-one']);
     }
 
     private function confirmationQuestion(User $user, int $count): string
@@ -210,11 +330,46 @@ class RevokeUserSessionsCommandTest extends TestCase
         return $response->getCookie(config('session.cookie'), false)->getValue();
     }
 
-    private function asClient(string $cookie): static
+    /**
+     * @return array{name: string, value: string}
+     */
+    private function signInRemembered(User $user): array
     {
+        $this->unencryptedCookies = [];
         $this->startNewClient();
 
-        return $this->withUnencryptedCookie(config('session.cookie'), $cookie);
+        $response = $this->post(route('login.store'), [
+            'email' => $user->email,
+            'password' => 'password',
+            'remember' => true,
+        ]);
+
+        $response->assertRedirect();
+
+        $name = Auth::guard('web')->getRecallerName();
+        $cookie = $response->getCookie($name, false);
+        $this->assertNotNull($cookie, 'No remember me cookie was issued.');
+
+        return ['name' => $name, 'value' => $cookie->getValue()];
+    }
+
+    /**
+     * @param  array{name: string, value: string}|null  $remember
+     */
+    private function asClient(?string $cookie, ?array $remember = null): static
+    {
+        $this->startNewClient();
+        $this->unencryptedCookies = [];
+
+        if ($cookie !== null) {
+            $this->withUnencryptedCookie(config('session.cookie'), $cookie);
+        }
+
+        if ($remember !== null) {
+            $this->withUnencryptedCookie($remember['name'], $remember['value']);
+        }
+
+        return $this;
     }
 
     /**

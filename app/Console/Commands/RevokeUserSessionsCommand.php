@@ -43,7 +43,16 @@ class RevokeUserSessionsCommand extends Command
         }
 
         if ($storedSessionCount === 0) {
-            $this->info("No sessions are stored for {$user->name} ({$user->email}, ID {$user->getKey()}).");
+            try {
+                $sessions->resetRememberToken($user);
+            } catch (Throwable $exception) {
+                report($exception);
+                $this->error('Remember me logins could not be reset. No sessions were revoked.');
+
+                return self::FAILURE;
+            }
+
+            $this->info("No sessions are stored for {$user->name} ({$user->email}, ID {$user->getKey()}). Remember me logins were reset.");
 
             return self::SUCCESS;
         }
@@ -57,6 +66,7 @@ class RevokeUserSessionsCommand extends Command
         }
 
         try {
+            $sessions->resetRememberToken($user);
             $revokedCount = $sessions->revokeAllSessions($user);
         } catch (Throwable $exception) {
             report($exception);
