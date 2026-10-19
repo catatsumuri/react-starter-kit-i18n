@@ -532,6 +532,65 @@ class SessionManagementTest extends TestCase
         $this->asClient($current['cookie'])->get(route('dashboard'))->assertOk();
     }
 
+    public function test_revoking_other_sessions_also_invalidates_other_remember_me_cookies(): void
+    {
+        $user = User::factory()->create();
+        $current = $this->signIn($user);
+        $attacker = $this->signInRemembered($user);
+        $originalToken = $user->fresh()->remember_token;
+
+        $this->asClient(null, $attacker['remember'])->get(route('dashboard'))->assertOk();
+
+        $this->confirmPassword($current['cookie']);
+        $this->asClient($current['cookie'])->delete(route('sessions.destroy-others'))->assertRedirect();
+
+        $this->asClient($attacker['cookie'])->get(route('dashboard'))->assertRedirect(route('login'));
+        $this->asClient(null, $attacker['remember'])->get(route('dashboard'))->assertRedirect(route('login'));
+        $this->assertNotSame($originalToken, $user->fresh()->remember_token);
+        $this->asClient($current['cookie'])->get(route('dashboard'))->assertOk();
+    }
+
+    public function test_revoking_all_sessions_also_invalidates_remember_me_cookies(): void
+    {
+        $user = User::factory()->create();
+        $current = $this->signInRemembered($user);
+        $other = $this->signInRemembered($user);
+        $bystander = $this->signInRemembered(User::factory()->create());
+
+        $this->confirmPassword($current['cookie']);
+        $this->asClient($current['cookie'], $current['remember'])
+            ->delete(route('sessions.destroy-all'))
+            ->assertRedirect(route('home'));
+
+        foreach ([$current, $other] as $client) {
+            $this->asClient(null, $client['remember'])->get(route('dashboard'))->assertRedirect(route('login'));
+        }
+
+        $this->asClient(null, $bystander['remember'])->get(route('dashboard'))->assertOk();
+    }
+
+    public function test_failing_to_reset_the_remember_token_does_not_report_success_or_sign_the_user_out(): void
+    {
+        $user = User::factory()->create();
+        $current = $this->signIn($user);
+        $this->storeSession('other-session', $user);
+        $this->confirmPassword($current['cookie']);
+
+        $this->partialMock(ManageDatabaseSessions::class, function (MockInterface $mock): void {
+            $mock->shouldReceive('resetRememberToken')->andThrow(new RuntimeException('Users unavailable'));
+        });
+
+        foreach (['sessions.destroy-others', 'sessions.destroy-all'] as $route) {
+            $this->asClient($current['cookie'])
+                ->delete(route($route))
+                ->assertRedirect()
+                ->assertSessionHas('inertia.flash_data.toast.type', 'error');
+        }
+
+        $this->assertDatabaseHas('sessions', ['id' => 'other-session']);
+        $this->asClient($current['cookie'])->get(route('dashboard'))->assertOk();
+    }
+
     /**
      * @return array{cookie: string, id: string}
      */
@@ -565,11 +624,50 @@ class SessionManagementTest extends TestCase
         $this->app->forgetInstance('auth.driver');
     }
 
-    private function asClient(string $cookie): static
+    /**
+     * @param  array{name: string, value: string}|null  $remember
+     */
+    private function asClient(?string $cookie, ?array $remember = null): static
     {
         $this->startNewClient();
+        $this->unencryptedCookies = [];
 
-        return $this->withUnencryptedCookie(config('session.cookie'), $cookie);
+        if ($cookie !== null) {
+            $this->withUnencryptedCookie(config('session.cookie'), $cookie);
+        }
+
+        if ($remember !== null) {
+            $this->withUnencryptedCookie($remember['name'], $remember['value']);
+        }
+
+        return $this;
+    }
+
+    /**
+     * @return array{cookie: string, id: string, remember: array{name: string, value: string}}
+     */
+    private function signInRemembered(User $user): array
+    {
+        $this->unencryptedCookies = [];
+        $this->startNewClient();
+
+        $response = $this->post(route('login.store'), [
+            'email' => $user->email,
+            'password' => 'password',
+            'remember' => true,
+        ]);
+
+        $response->assertRedirect();
+
+        $name = Auth::guard('web')->getRecallerName();
+        $remember = $response->getCookie($name, false);
+        $this->assertNotNull($remember, 'No remember me cookie was issued.');
+
+        return [
+            'cookie' => $response->getCookie(config('session.cookie'), false)->getValue(),
+            'id' => $response->getCookie(config('session.cookie'))->getValue(),
+            'remember' => ['name' => $name, 'value' => $remember->getValue()],
+        ];
     }
 
     private function confirmPassword(string $cookie): void
