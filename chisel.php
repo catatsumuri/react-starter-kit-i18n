@@ -263,8 +263,8 @@ return Chisel::script(__DIR__)
             $c->files(
                 'app/Providers/FortifyServiceProvider.php',
                 'routes/settings.php',
+                'resources/js/layouts/settings/layout.tsx',
                 'tests/Feature/Settings/SecurityTest.php',
-                'tests/Feature/Settings/SessionManagementTest.php',
             )->removeSectionMarkers('password-confirmation');
         },
         else: function (Chisel $c) use ($paths) {
@@ -274,13 +274,18 @@ return Chisel::script(__DIR__)
             $c->files(
                 'app/Providers/FortifyServiceProvider.php',
                 'routes/settings.php',
+                'resources/js/layouts/settings/layout.tsx',
                 'tests/Feature/Settings/SecurityTest.php',
-                'tests/Feature/Settings/SessionManagementTest.php',
             )->removeSection('password-confirmation');
 
+            // Revoking sessions from the browser relies on password confirmation,
+            // so the web UI is removed along with it. The CLI command remains.
             $c->files(
                 $paths['confirm_password'],
                 'tests/Feature/Auth/PasswordConfirmationTest.php',
+                'app/Http/Controllers/Settings/SessionController.php',
+                'resources/js/pages/settings/sessions.tsx',
+                'tests/Feature/Settings/SessionManagementTest.php',
             )->delete();
         },
     )

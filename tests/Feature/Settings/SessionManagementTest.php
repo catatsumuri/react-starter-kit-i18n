@@ -311,7 +311,6 @@ class SessionManagementTest extends TestCase
         $this->assertAuthenticated();
     }
 
-    /* @chisel-password-confirmation */
     #[DataProvider('revocationEndpoints')]
     public function test_revocation_requires_password_confirmation_within_fifteen_minutes(string $route, string $parameter): void
     {
@@ -329,9 +328,7 @@ class SessionManagementTest extends TestCase
         $this->assertAuthenticated();
         $this->assertDatabaseHas('sessions', ['id' => 'other-session']);
     }
-    /* @end-chisel-password-confirmation */
 
-    /* @chisel-password-confirmation */
     #[DataProvider('revocationEndpoints')]
     public function test_revocation_without_any_confirmation_is_redirected_to_confirm_password(string $route, string $parameter): void
     {
@@ -344,7 +341,6 @@ class SessionManagementTest extends TestCase
 
         $this->assertDatabaseHas('sessions', ['id' => 'other-session']);
     }
-    /* @end-chisel-password-confirmation */
 
     public function test_revocation_is_allowed_within_the_confirmation_window(): void
     {
@@ -676,11 +672,9 @@ class SessionManagementTest extends TestCase
 
     private function confirmPassword(string $cookie): void
     {
-        /* @chisel-password-confirmation */
         $this->asClient($cookie)
             ->post(route('password.confirm.store'), ['password' => 'password'])
             ->assertRedirect();
-        /* @end-chisel-password-confirmation */
     }
 
     private function revocationUrl(string $route, string $parameter): string
