@@ -27,7 +27,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('settings/sessions', [SessionController::class, 'index'])
         ->name('sessions.index');
 
-    Route::middleware([RequirePassword::using(passwordTimeoutSeconds: 900), 'throttle:session-revocation'])
+    Route::middleware([
+        /* @chisel-password-confirmation */
+        RequirePassword::using(passwordTimeoutSeconds: 900),
+        /* @end-chisel-password-confirmation */
+        'throttle:session-revocation',
+    ])
         ->group(function () {
             Route::delete('settings/sessions/all', [SessionController::class, 'destroyAll'])
                 ->name('sessions.destroy-all');
