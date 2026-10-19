@@ -218,7 +218,7 @@ class RevokeUserSessionsCommandTest extends TestCase
         });
 
         $this->artisan('security:revoke-sessions', ['selector' => 'id:'.$user->getKey(), '--force' => true])
-            ->expectsOutputToContain('Session storage is unavailable. No sessions were revoked.')
+            ->expectsOutputToContain('Remember me logins were reset, but session storage is unavailable. No sessions were revoked.')
             ->doesntExpectOutputToContain('Revoked')
             ->assertFailed();
     }
@@ -327,15 +327,37 @@ class RevokeUserSessionsCommandTest extends TestCase
         $user = User::factory()->create();
         $this->storeSession('session-one', $user);
 
+        $originalToken = $user->fresh()->remember_token;
+
         User::updating(function (): bool {
             throw new RuntimeException('Users unavailable');
         });
 
         $this->artisan('security:revoke-sessions', ['selector' => 'id:'.$user->getKey(), '--force' => true])
-            ->expectsOutputToContain('No sessions were revoked.')
+            ->expectsOutputToContain('Remember me logins could not be reset. No sessions were revoked.')
             ->doesntExpectOutputToContain('Revoked')
             ->assertFailed();
 
+        $this->assertDatabaseHas('sessions', ['id' => 'session-one']);
+        $this->assertSame($originalToken, $user->fresh()->remember_token);
+    }
+
+    public function test_a_failure_to_delete_sessions_reports_that_remember_me_logins_were_already_reset(): void
+    {
+        $user = User::factory()->create();
+        $user->forceFill(['remember_token' => 'original-token'])->save();
+        $this->storeSession('session-one', $user);
+
+        $this->partialMock(ManageDatabaseSessions::class, function (MockInterface $mock): void {
+            $mock->shouldReceive('revokeAllSessions')->andThrow(new RuntimeException('Storage unavailable'));
+        });
+
+        $this->artisan('security:revoke-sessions', ['selector' => 'id:'.$user->getKey(), '--force' => true])
+            ->expectsOutputToContain('Remember me logins were reset, but session storage is unavailable. No sessions were revoked.')
+            ->doesntExpectOutputToContain('Revoked')
+            ->assertFailed();
+
+        $this->assertNotSame('original-token', $user->fresh()->remember_token);
         $this->assertDatabaseHas('sessions', ['id' => 'session-one']);
     }
 

@@ -59,10 +59,18 @@ class RevokeUserSessionsCommand extends Command
 
         try {
             $sessions->resetRememberToken($user);
+        } catch (Throwable $exception) {
+            report($exception);
+            $this->error('Remember me logins could not be reset. No sessions were revoked.');
+
+            return self::FAILURE;
+        }
+
+        try {
             $revokedCount = $sessions->revokeAllSessions($user);
         } catch (Throwable $exception) {
             report($exception);
-            $this->error('Session storage is unavailable. No sessions were revoked.');
+            $this->error('Remember me logins were reset, but session storage is unavailable. No sessions were revoked.');
 
             return self::FAILURE;
         }
