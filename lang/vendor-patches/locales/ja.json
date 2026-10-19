@@ -20,6 +20,7 @@
     "Other sessions revoked.": "他のセッションを失効しました。",
     "Page :current of :last": ":last ページ中 :current ページ",
     "Please proceed with caution, this cannot be undone.": "注意して進めてください。この操作は元に戻せません。",
+    "Remember me sign-ins were ended, but sessions could not be removed. Please try again.": "「ログイン状態を保持する」による自動ログインは無効にしましたが、セッションを削除できませんでした。もう一度お試しください。",
     "Removing...": "削除中...",
     "Review browsers signed in to your account and revoke access you no longer need.": "アカウントにログインしているブラウザーを確認し、不要なアクセスを失効できます。",
     "Revoke all other sessions?": "他のすべてのセッションを失効しますか？",

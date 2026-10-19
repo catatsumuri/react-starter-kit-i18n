@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Settings;
 
 use App\Actions\Sessions\ManageDatabaseSessions;
+use App\Actions\Sessions\SessionRevocationException;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -56,7 +57,7 @@ class SessionController extends Controller
         } catch (Throwable $exception) {
             report($exception);
 
-            return $this->storageFailure();
+            return $this->storageFailure($exception);
         }
 
         abort_unless($revoked, 404);
@@ -71,15 +72,14 @@ class SessionController extends Controller
         abort_unless($this->sessions->isAvailable(), 404);
 
         try {
-            $this->sessions->resetRememberToken($request->user());
-            $revokedCount = $this->sessions->revokeOtherSessions(
+            $revokedCount = $this->sessions->revokeOtherSessionsAndRememberMe(
                 $request->user(),
                 $request->session()->getId(),
             );
         } catch (Throwable $exception) {
             report($exception);
 
-            return $this->storageFailure();
+            return $this->storageFailure($exception);
         }
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Other sessions revoked.')]);
@@ -94,12 +94,11 @@ class SessionController extends Controller
         $user = $request->user();
 
         try {
-            $this->sessions->resetRememberToken($user);
-            $revokedCount = $this->sessions->revokeAllSessions($user);
+            $revokedCount = $this->sessions->revokeAllSessionsAndRememberMe($user);
         } catch (Throwable $exception) {
             report($exception);
 
-            return $this->storageFailure();
+            return $this->storageFailure($exception);
         }
 
         Auth::guard('web')->logout();
@@ -109,11 +108,15 @@ class SessionController extends Controller
         return redirect()->route('home');
     }
 
-    private function storageFailure(): RedirectResponse
+    private function storageFailure(?Throwable $exception = null): RedirectResponse
     {
+        $partial = $exception instanceof SessionRevocationException && $exception->rememberMeReset;
+
         Inertia::flash('toast', [
             'type' => 'error',
-            'message' => __('Sessions are temporarily unavailable. Please try again.'),
+            'message' => $partial
+                ? __('Remember me sign-ins were ended, but sessions could not be removed. Please try again.')
+                : __('Sessions are temporarily unavailable. Please try again.'),
         ]);
 
         return back();

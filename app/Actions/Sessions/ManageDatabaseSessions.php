@@ -4,12 +4,14 @@ namespace App\Actions\Sessions;
 
 use App\Models\User;
 use App\Support\ClientDescriptor;
+use Closure;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use stdClass;
+use Throwable;
 
 class ManageDatabaseSessions
 {
@@ -75,31 +77,51 @@ class ManageDatabaseSessions
         }
 
         // A remember me cookie can recreate the session just revoked, and the
-        // token is shared by every browser, so it is rotated here as well.
-        $this->resetRememberToken($user);
-
-        return $this->connection()
-            ->table($this->table())
-            ->where('user_id', $user->getAuthIdentifier())
-            ->where('id', $sessionId)
-            ->delete() === 1;
+        // token is shared by every browser, so it is rotated together with the
+        // deletion, and only when a session was actually deleted.
+        return $this->withRememberMeReset(
+            $user,
+            fn (): bool => $this->deleteSession($user, $sessionId) === 1,
+            fn (bool $deleted): bool => $deleted,
+        );
     }
 
     public function revokeOtherSessions(User $user, string $currentSessionId): int
     {
-        return $this->connection()
-            ->table($this->table())
-            ->where('user_id', $user->getAuthIdentifier())
-            ->where('id', '!=', $currentSessionId)
-            ->delete();
+        return $this->deleteSessions($user, $currentSessionId);
     }
 
     public function revokeAllSessions(User $user): int
     {
-        return $this->connection()
-            ->table($this->table())
-            ->where('user_id', $user->getAuthIdentifier())
-            ->delete();
+        return $this->deleteSessions($user, null);
+    }
+
+    /**
+     * Revoke every other session and end all remember me logins together.
+     *
+     * @throws SessionRevocationException when only the remember me reset went through
+     */
+    public function revokeOtherSessionsAndRememberMe(User $user, string $currentSessionId): int
+    {
+        return $this->withRememberMeReset(
+            $user,
+            fn (): int => $this->deleteSessions($user, $currentSessionId),
+            fn (): bool => true,
+        );
+    }
+
+    /**
+     * Revoke every session and end all remember me logins together.
+     *
+     * @throws SessionRevocationException when only the remember me reset went through
+     */
+    public function revokeAllSessionsAndRememberMe(User $user): int
+    {
+        return $this->withRememberMeReset(
+            $user,
+            fn (): int => $this->deleteSessions($user, null),
+            fn (): bool => true,
+        );
     }
 
     /**
@@ -159,6 +181,77 @@ class ManageDatabaseSessions
             'last_activity' => Carbon::createFromTimestamp((int) $session->last_activity)->toISOString(),
             'is_current' => $isCurrent,
         ];
+    }
+
+    /**
+     * Delete sessions and rotate the remember token as one unit.
+     *
+     * When sessions and users share a database connection both changes happen in
+     * one transaction: a failure on either side rolls back both, and the token is
+     * only rotated when $shouldReset accepts the deletion result. On separate
+     * connections that is impossible, so the token is rotated first (a deleted
+     * session could otherwise be recreated by a remember me cookie) and a failing
+     * deletion is reported as a partial result.
+     *
+     * @template T
+     *
+     * @param  Closure(): T  $delete
+     * @param  Closure(T): bool  $shouldReset
+     * @return T
+     *
+     * @throws SessionRevocationException
+     */
+    private function withRememberMeReset(User $user, Closure $delete, Closure $shouldReset): mixed
+    {
+        if ($this->sharesConnectionWithUsers($user)) {
+            return $this->connection()->transaction(function () use ($user, $delete, $shouldReset) {
+                $result = $delete();
+
+                if ($shouldReset($result)) {
+                    $this->resetRememberToken($user);
+                }
+
+                return $result;
+            });
+        }
+
+        $this->resetRememberToken($user);
+
+        try {
+            return $delete();
+        } catch (Throwable $exception) {
+            throw new SessionRevocationException(rememberMeReset: true, previous: $exception);
+        }
+    }
+
+    private function sharesConnectionWithUsers(User $user): bool
+    {
+        $default = config('database.default');
+        $sessions = config('session.connection');
+
+        return ($user->getConnectionName() ?? $default) === (is_string($sessions) ? $sessions : $default);
+    }
+
+    protected function deleteSession(User $user, string $sessionId): int
+    {
+        return $this->connection()
+            ->table($this->table())
+            ->where('user_id', $user->getAuthIdentifier())
+            ->where('id', $sessionId)
+            ->delete();
+    }
+
+    protected function deleteSessions(User $user, ?string $exceptSessionId): int
+    {
+        $query = $this->connection()
+            ->table($this->table())
+            ->where('user_id', $user->getAuthIdentifier());
+
+        if ($exceptSessionId !== null) {
+            $query->where('id', '!=', $exceptSessionId);
+        }
+
+        return $query->delete();
     }
 
     /**

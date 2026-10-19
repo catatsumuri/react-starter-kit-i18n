@@ -20,6 +20,7 @@
     "Other sessions revoked.": "Other sessions revoked.",
     "Page :current of :last": "Page :current of :last",
     "Please proceed with caution, this cannot be undone.": "Please proceed with caution, this cannot be undone.",
+    "Remember me sign-ins were ended, but sessions could not be removed. Please try again.": "Remember me sign-ins were ended, but sessions could not be removed. Please try again.",
     "Removing...": "Removing...",
     "Review browsers signed in to your account and revoke access you no longer need.": "Review browsers signed in to your account and revoke access you no longer need.",
     "Revoke all other sessions?": "Revoke all other sessions?",

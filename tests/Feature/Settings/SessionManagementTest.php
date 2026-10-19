@@ -690,6 +690,195 @@ class SessionManagementTest extends TestCase
         $this->asClient($current['cookie'])->get(route('dashboard'))->assertOk();
     }
 
+    public function test_a_failing_delete_while_revoking_one_session_changes_nothing(): void
+    {
+        [$user, $current, $attacker] = $this->userWithRememberedSecondSession();
+        $originalToken = $user->fresh()->remember_token;
+
+        $this->partialMock(ManageDatabaseSessions::class, function (MockInterface $mock): void {
+            $mock->shouldAllowMockingProtectedMethods();
+            $mock->shouldReceive('deleteSession')->andThrow(new RuntimeException('Storage unavailable'));
+        });
+
+        $this->asClient($current['cookie'])
+            ->delete(route('sessions.destroy', app(ManageDatabaseSessions::class)->fingerprint($user, $attacker['id'])))
+            ->assertRedirect()
+            ->assertSessionHas('inertia.flash_data.toast.type', 'error')
+            ->assertSessionHas('inertia.flash_data.toast.message', __('Sessions are temporarily unavailable. Please try again.'));
+
+        $this->assertDatabaseHas('sessions', ['id' => $attacker['id']]);
+        $this->assertSame($originalToken, $user->fresh()->remember_token);
+    }
+
+    public function test_a_failing_token_update_rolls_back_the_deleted_session_when_revoking_one(): void
+    {
+        [$user, $current, $attacker] = $this->userWithRememberedSecondSession();
+        $originalToken = $user->fresh()->remember_token;
+
+        User::updating(function (): bool {
+            throw new RuntimeException('Users unavailable');
+        });
+
+        $this->asClient($current['cookie'])
+            ->delete(route('sessions.destroy', app(ManageDatabaseSessions::class)->fingerprint($user, $attacker['id'])))
+            ->assertRedirect()
+            ->assertSessionHas('inertia.flash_data.toast.type', 'error')
+            ->assertSessionHas('inertia.flash_data.toast.message', __('Sessions are temporarily unavailable. Please try again.'));
+
+        $this->assertDatabaseHas('sessions', ['id' => $attacker['id'], 'user_id' => $user->id]);
+        $this->assertSame($originalToken, $user->fresh()->remember_token);
+    }
+
+    public function test_a_session_that_vanishes_before_deletion_does_not_reset_the_remember_token(): void
+    {
+        [$user, $current, $attacker] = $this->userWithRememberedSecondSession();
+        $originalToken = $user->fresh()->remember_token;
+
+        $this->partialMock(ManageDatabaseSessions::class, function (MockInterface $mock): void {
+            $mock->shouldAllowMockingProtectedMethods();
+            $mock->shouldReceive('deleteSession')->andReturn(0);
+        });
+
+        $this->asClient($current['cookie'])
+            ->delete(route('sessions.destroy', app(ManageDatabaseSessions::class)->fingerprint($user, $attacker['id'])))
+            ->assertNotFound();
+
+        $this->assertSame($originalToken, $user->fresh()->remember_token);
+    }
+
+    public function test_a_failing_delete_while_revoking_one_session_reports_a_partial_result_on_a_separate_connection(): void
+    {
+        $this->useSeparateSessionConnection();
+        [$user, $current, $attacker] = $this->userWithRememberedSecondSession();
+        $originalToken = $user->fresh()->remember_token;
+
+        $this->partialMock(ManageDatabaseSessions::class, function (MockInterface $mock): void {
+            $mock->shouldAllowMockingProtectedMethods();
+            $mock->shouldReceive('deleteSession')->andThrow(new RuntimeException('Storage unavailable'));
+        });
+
+        $this->asClient($current['cookie'])
+            ->delete(route('sessions.destroy', app(ManageDatabaseSessions::class)->fingerprint($user, $attacker['id'])))
+            ->assertRedirect()
+            ->assertSessionHas('inertia.flash_data.toast.type', 'error')
+            ->assertSessionHas('inertia.flash_data.toast.message', __('Remember me sign-ins were ended, but sessions could not be removed. Please try again.'));
+
+        $this->assertDatabaseHas('sessions', ['id' => $attacker['id']]);
+        $this->assertNotSame($originalToken, $user->fresh()->remember_token);
+        $this->asClient(null, $attacker['remember'])->get(route('dashboard'))->assertRedirect(route('login'));
+    }
+
+    public function test_a_failing_delete_while_revoking_other_sessions_changes_nothing(): void
+    {
+        [$user, $current, $attacker] = $this->userWithRememberedSecondSession();
+        $originalToken = $user->fresh()->remember_token;
+
+        $this->partialMock(ManageDatabaseSessions::class, function (MockInterface $mock): void {
+            $mock->shouldAllowMockingProtectedMethods();
+            $mock->shouldReceive('deleteSessions')->andThrow(new RuntimeException('Storage unavailable'));
+        });
+
+        $this->asClient($current['cookie'])
+            ->delete(route('sessions.destroy-others'))
+            ->assertRedirect()
+            ->assertSessionHas('inertia.flash_data.toast.type', 'error')
+            ->assertSessionHas('inertia.flash_data.toast.message', __('Sessions are temporarily unavailable. Please try again.'));
+
+        $this->assertDatabaseHas('sessions', ['id' => $attacker['id']]);
+        $this->assertSame($originalToken, $user->fresh()->remember_token);
+        $this->asClient($current['cookie'])->get(route('dashboard'))->assertOk();
+    }
+
+    public function test_a_failing_delete_while_revoking_other_sessions_reports_a_partial_result_on_a_separate_connection(): void
+    {
+        $this->useSeparateSessionConnection();
+        [$user, $current, $attacker] = $this->userWithRememberedSecondSession();
+        $originalToken = $user->fresh()->remember_token;
+
+        $this->partialMock(ManageDatabaseSessions::class, function (MockInterface $mock): void {
+            $mock->shouldAllowMockingProtectedMethods();
+            $mock->shouldReceive('deleteSessions')->andThrow(new RuntimeException('Storage unavailable'));
+        });
+
+        $this->asClient($current['cookie'])
+            ->delete(route('sessions.destroy-others'))
+            ->assertRedirect()
+            ->assertSessionHas('inertia.flash_data.toast.type', 'error')
+            ->assertSessionHas('inertia.flash_data.toast.message', __('Remember me sign-ins were ended, but sessions could not be removed. Please try again.'));
+
+        $this->assertDatabaseHas('sessions', ['id' => $attacker['id']]);
+        $this->assertNotSame($originalToken, $user->fresh()->remember_token);
+        $this->asClient($current['cookie'])->get(route('dashboard'))->assertOk();
+    }
+
+    public function test_a_failing_delete_while_revoking_all_sessions_changes_nothing_and_keeps_the_user_signed_in(): void
+    {
+        [$user, $current, $attacker] = $this->userWithRememberedSecondSession();
+        $originalToken = $user->fresh()->remember_token;
+
+        $this->partialMock(ManageDatabaseSessions::class, function (MockInterface $mock): void {
+            $mock->shouldAllowMockingProtectedMethods();
+            $mock->shouldReceive('deleteSessions')->andThrow(new RuntimeException('Storage unavailable'));
+        });
+
+        $this->asClient($current['cookie'])
+            ->delete(route('sessions.destroy-all'))
+            ->assertRedirect()
+            ->assertSessionHas('inertia.flash_data.toast.type', 'error')
+            ->assertSessionHas('inertia.flash_data.toast.message', __('Sessions are temporarily unavailable. Please try again.'));
+
+        $this->assertDatabaseHas('sessions', ['id' => $attacker['id']]);
+        $this->assertDatabaseHas('sessions', ['id' => $current['id']]);
+        $this->assertSame($originalToken, $user->fresh()->remember_token);
+        $this->asClient($current['cookie'])->get(route('dashboard'))->assertOk();
+    }
+
+    public function test_a_failing_delete_while_revoking_all_sessions_reports_a_partial_result_on_a_separate_connection(): void
+    {
+        $this->useSeparateSessionConnection();
+        [$user, $current, $attacker] = $this->userWithRememberedSecondSession();
+        $originalToken = $user->fresh()->remember_token;
+
+        $this->partialMock(ManageDatabaseSessions::class, function (MockInterface $mock): void {
+            $mock->shouldAllowMockingProtectedMethods();
+            $mock->shouldReceive('deleteSessions')->andThrow(new RuntimeException('Storage unavailable'));
+        });
+
+        $this->asClient($current['cookie'])
+            ->delete(route('sessions.destroy-all'))
+            ->assertRedirect()
+            ->assertSessionHas('inertia.flash_data.toast.type', 'error')
+            ->assertSessionHas('inertia.flash_data.toast.message', __('Remember me sign-ins were ended, but sessions could not be removed. Please try again.'));
+
+        $this->assertDatabaseHas('sessions', ['id' => $attacker['id']]);
+        $this->assertDatabaseHas('sessions', ['id' => $current['id']]);
+        $this->assertNotSame($originalToken, $user->fresh()->remember_token);
+        $this->asClient($current['cookie'])->get(route('dashboard'))->assertOk();
+    }
+
+    public function test_a_failing_token_update_rolls_back_the_deleted_sessions_when_revoking_others_and_all(): void
+    {
+        foreach (['sessions.destroy-others', 'sessions.destroy-all'] as $route) {
+            [$user, $current, $attacker] = $this->userWithRememberedSecondSession();
+            $originalToken = $user->fresh()->remember_token;
+
+            User::updating(function (): bool {
+                throw new RuntimeException('Users unavailable');
+            });
+
+            $this->asClient($current['cookie'])
+                ->delete(route($route))
+                ->assertRedirect()
+                ->assertSessionHas('inertia.flash_data.toast.type', 'error');
+
+            $this->assertDatabaseHas('sessions', ['id' => $attacker['id'], 'user_id' => $user->id]);
+            $this->assertDatabaseHas('sessions', ['id' => $current['id'], 'user_id' => $user->id]);
+            $this->assertSame($originalToken, $user->fresh()->remember_token);
+
+            User::flushEventListeners();
+        }
+    }
+
     public function test_revoking_all_sessions_also_invalidates_remember_me_cookies(): void
     {
         $user = User::factory()->create();
@@ -729,6 +918,38 @@ class SessionManagementTest extends TestCase
 
         $this->assertDatabaseHas('sessions', ['id' => 'other-session']);
         $this->asClient($current['cookie'])->get(route('dashboard'))->assertOk();
+    }
+
+    /**
+     * @return array{0: User, 1: array{cookie: string, id: string}, 2: array{cookie: string, id: string, remember: array{name: string, value: string}}}
+     */
+    private function userWithRememberedSecondSession(): array
+    {
+        $user = User::factory()->create();
+        $current = $this->signIn($user);
+        $attacker = $this->signInRemembered($user);
+        $this->confirmPassword($current['cookie']);
+
+        return [$user, $current, $attacker];
+    }
+
+    /**
+     * Keeps the same database but under a different connection name, so
+     * sessions and users can no longer share one transaction.
+     */
+    private function useSeparateSessionConnection(): void
+    {
+        $default = config('database.default');
+
+        config([
+            'database.connections.session_alt' => config("database.connections.{$default}"),
+            'session.connection' => 'session_alt',
+        ]);
+
+        DB::purge('session_alt');
+        $pdo = DB::connection()->getPdo();
+        DB::connection('session_alt')->setPdo($pdo)->setReadPdo($pdo);
+        $this->app['session']->forgetDrivers();
     }
 
     /**
