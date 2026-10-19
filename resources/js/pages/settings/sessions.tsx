@@ -281,10 +281,7 @@ export default function Sessions({
                     <div className="flex flex-wrap gap-3">
                         <Dialog>
                             <DialogTrigger asChild>
-                                <Button
-                                    variant="outline"
-                                    disabled={!otherSessions?.total}
-                                >
+                                <Button variant="outline">
                                     {__('Revoke other sessions')}
                                 </Button>
                             </DialogTrigger>

@@ -550,6 +550,22 @@ class SessionManagementTest extends TestCase
         $this->asClient($current['cookie'])->get(route('dashboard'))->assertOk();
     }
 
+    public function test_revoking_other_sessions_invalidates_remember_me_cookies_even_when_no_other_session_is_stored(): void
+    {
+        $user = User::factory()->create();
+        $current = $this->signIn($user);
+        $attacker = $this->signInRemembered($user);
+        DB::table('sessions')->where('id', $attacker['id'])->delete();
+
+        $this->assertSame(0, DB::table('sessions')->where('user_id', $user->id)->where('id', '!=', $current['id'])->count());
+
+        $this->confirmPassword($current['cookie']);
+        $this->asClient($current['cookie'])->delete(route('sessions.destroy-others'))->assertRedirect();
+
+        $this->asClient(null, $attacker['remember'])->get(route('dashboard'))->assertRedirect(route('login'));
+        $this->asClient($current['cookie'])->get(route('dashboard'))->assertOk();
+    }
+
     public function test_revoking_all_sessions_also_invalidates_remember_me_cookies(): void
     {
         $user = User::factory()->create();
