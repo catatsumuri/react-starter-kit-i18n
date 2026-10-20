@@ -111,6 +111,33 @@ class SecurityEventLoggingTest extends TestCase
         $this->assertStringNotContainsString('new-secret-value', json_encode($event->properties));
     }
 
+    public function test_a_failing_account_lookup_does_not_change_the_failed_reset_response(): void
+    {
+        $user = User::factory()->create();
+        $lookups = 0;
+        User::retrieved(function () use (&$lookups): void {
+            if (++$lookups > 1) {
+                throw new \RuntimeException('lookup failed');
+            }
+        });
+
+        try {
+            $this->post(route('password.update'), [
+                'token' => 'invalid-token',
+                'email' => $user->email,
+                'password' => 'new-secret-value',
+                'password_confirmation' => 'new-secret-value',
+            ])->assertSessionHasErrors('email');
+        } finally {
+            User::flushEventListeners();
+        }
+
+        $event = Activity::inLog('security')->sole();
+
+        $this->assertSame('password.reset_failed', $event->description);
+        $this->assertNull($event->subject_id);
+    }
+
     public function test_a_reset_for_an_unknown_account_records_a_failure_without_a_subject(): void
     {
         $this->post(route('password.update'), [
