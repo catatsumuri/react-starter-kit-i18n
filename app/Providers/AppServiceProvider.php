@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Actions\LogSecurityEvent;
+use App\Http\Responses\FailedPasswordResetResponse;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Closure;
@@ -17,6 +18,7 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password;
+use Laravel\Fortify\Contracts\FailedPasswordResetResponse as FailedPasswordResetResponseContract;
 use Laravel\Fortify\Events\RecoveryCodesGenerated;
 use Laravel\Fortify\Events\TwoFactorAuthenticationConfirmed;
 use Laravel\Fortify\Events\TwoFactorAuthenticationDisabled;
@@ -33,7 +35,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->singleton(FailedPasswordResetResponseContract::class, FailedPasswordResetResponse::class);
     }
 
     /**
