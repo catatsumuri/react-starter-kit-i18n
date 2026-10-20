@@ -8,6 +8,8 @@ use Carbon\CarbonImmutable;
 use Closure;
 use Illuminate\Auth\Events\Failed;
 use Illuminate\Auth\Events\PasswordReset;
+use Illuminate\Contracts\Auth\Authenticatable;
+use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
@@ -45,14 +47,23 @@ class AppServiceProvider extends ServiceProvider
     }
 
     /**
-     * Only configured viewers may read the security log.
+     * Only configured viewers with a verified email may read the security log.
+     *
+     * An email address only identifies a person once its owner has been
+     * confirmed. A user model that cannot verify emails (Chisel removes
+     * MustVerifyEmail when email verification is disabled) is therefore denied,
+     * because the verified middleware lets such users through unchecked.
      */
     protected function configureSecurityEventAccess(): void
     {
-        Gate::define('view-security-events', function (User $user): bool {
+        Gate::define('view-security-events', function (Authenticatable $user): bool {
+            if (! $user instanceof MustVerifyEmail || ! $user->hasVerifiedEmail()) {
+                return false;
+            }
+
             $viewers = array_map(Str::lower(...), config('audit.security_viewers'));
 
-            return in_array(Str::lower($user->email), $viewers, true);
+            return in_array(Str::lower($user->getEmailForVerification()), $viewers, true);
         });
     }
 
