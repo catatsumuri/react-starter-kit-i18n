@@ -19,4 +19,21 @@ return [
         'security' => env('AUDIT_SECURITY_RETENTION_DAYS', 365),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Security Log Viewers
+    |--------------------------------------------------------------------------
+    |
+    | Email addresses (comma separated in AUDIT_SECURITY_VIEWERS) of the users
+    | allowed to read the security log. When empty, nobody can read it. This is
+    | only consulted by the view-security-events gate, so it can be replaced by
+    | a role check without touching the routes.
+    |
+    */
+
+    'security_viewers' => array_values(array_filter(array_map(
+        'trim',
+        explode(',', (string) env('AUDIT_SECURITY_VIEWERS', '')),
+    ))),
+
 ];

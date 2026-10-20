@@ -11,7 +11,9 @@ use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password;
 use Laravel\Fortify\Events\RecoveryCodesGenerated;
 use Laravel\Fortify\Events\TwoFactorAuthenticationConfirmed;
@@ -39,6 +41,19 @@ class AppServiceProvider extends ServiceProvider
     {
         $this->configureDefaults();
         $this->configureSecurityEventLogging();
+        $this->configureSecurityEventAccess();
+    }
+
+    /**
+     * Only configured viewers may read the security log.
+     */
+    protected function configureSecurityEventAccess(): void
+    {
+        Gate::define('view-security-events', function (User $user): bool {
+            $viewers = array_map(Str::lower(...), config('audit.security_viewers'));
+
+            return in_array(Str::lower($user->email), $viewers, true);
+        });
     }
 
     /**
