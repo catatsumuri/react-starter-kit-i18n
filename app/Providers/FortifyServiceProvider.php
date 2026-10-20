@@ -2,11 +2,12 @@
 
 namespace App\Providers;
 
+use App\Actions\Fortify\CreateNewUser;
 /* @chisel-registration */
 
-use App\Actions\Fortify\CreateNewUser;
-/* @end-chisel-registration */
 use App\Actions\Fortify\ResetUserPassword;
+/* @end-chisel-registration */
+use App\Http\Middleware\ThrottlePasswordReset;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
@@ -104,6 +105,15 @@ class FortifyServiceProvider extends ServiceProvider
             $throttleKey = Str::transliterate(Str::lower($request->input(Fortify::username())).'|'.$request->ip());
 
             return Limit::perMinute(5)->by($throttleKey);
+        });
+
+        RateLimiter::for(ThrottlePasswordReset::LIMITER, function (Request $request) {
+            $email = Str::transliterate(Str::lower((string) $request->input(Fortify::email())));
+
+            return [
+                Limit::perMinute(10)->by('ip|'.$request->ip()),
+                Limit::perMinute(5)->by('account|'.$email.'|'.$request->ip()),
+            ];
         });
 
         /* @chisel-passkeys */
