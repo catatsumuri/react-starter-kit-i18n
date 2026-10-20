@@ -3,6 +3,7 @@
 use App\Http\Controllers\Settings\ProfileController;
 use App\Http\Controllers\Settings\SecurityController;
 /* @chisel-password-confirmation */
+use App\Http\Controllers\Settings\SessionController;
 use Illuminate\Auth\Middleware\RequirePassword;
 /* @end-chisel-password-confirmation */
 use Illuminate\Support\Facades\Route;
@@ -22,6 +23,22 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->middleware(RequirePassword::class)
         /* @end-chisel-password-confirmation */
         ->name('security.edit');
+
+    /* @chisel-password-confirmation */
+    Route::middleware(RequirePassword::using(passwordTimeoutSeconds: 900))->group(function () {
+        Route::get('settings/sessions', [SessionController::class, 'index'])
+            ->name('sessions.index');
+
+        Route::middleware('throttle:session-revocation')->group(function () {
+            Route::delete('settings/sessions/all', [SessionController::class, 'destroyAll'])
+                ->name('sessions.destroy-all');
+            Route::delete('settings/sessions', [SessionController::class, 'destroyOthers'])
+                ->name('sessions.destroy-others');
+            Route::delete('settings/sessions/{fingerprint}', [SessionController::class, 'destroy'])
+                ->name('sessions.destroy');
+        });
+    });
+    /* @end-chisel-password-confirmation */
 
     Route::put('settings/password', [SecurityController::class, 'update'])
         ->middleware('throttle:6,1')
