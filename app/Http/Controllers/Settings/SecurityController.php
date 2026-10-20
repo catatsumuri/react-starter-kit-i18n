@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Settings;
 
+use App\Actions\LogSecurityEvent;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Settings\PasswordUpdateRequest;
 use App\Http\Requests\Settings\TwoFactorAuthenticationRequest;
@@ -10,6 +11,7 @@ use Illuminate\Validation\Rules\Password;
 use Inertia\Inertia;
 use Inertia\Response;
 use Laravel\Fortify\Features;
+use RuntimeException;
 
 class SecurityController extends Controller
 {
@@ -59,11 +61,17 @@ class SecurityController extends Controller
     /**
      * Update the user's password.
      */
-    public function update(PasswordUpdateRequest $request): RedirectResponse
+    public function update(PasswordUpdateRequest $request, LogSecurityEvent $logSecurityEvent): RedirectResponse
     {
-        $request->user()->update([
+        $updated = $request->user()->update([
             'password' => $request->password,
         ]);
+
+        if (! $updated) {
+            throw new RuntimeException('The password update was cancelled.');
+        }
+
+        $logSecurityEvent('password.changed', $request->user());
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Password updated.')]);
 
