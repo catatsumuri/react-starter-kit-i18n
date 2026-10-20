@@ -791,7 +791,7 @@ class SessionManagementTest extends TestCase
         $this->asClient(null, $attacker['remember'])->get(route('dashboard'))->assertRedirect(route('login'));
     }
 
-    public function test_revocation_works_with_sessions_stored_on_a_different_database_driver(): void
+    public function test_revocation_works_with_sessions_stored_on_an_independent_database_connection(): void
     {
         $this->useSqliteSessionConnection();
         $user = User::factory()->create();
@@ -801,8 +801,10 @@ class SessionManagementTest extends TestCase
         $this->confirmPassword($current['cookie']);
         $sessions = DB::connection('session_sqlite');
 
+        $this->assertNotSame(DB::connection()->getName(), $sessions->getName());
+        $this->assertNotSame(DB::connection()->getPdo(), $sessions->getPdo());
         $this->assertTrue($sessions->table('sessions')->where('id', $first['id'])->exists());
-        $this->assertNotSame(DB::connection()->getDriverName(), $sessions->getDriverName());
+        $this->assertFalse(DB::table('sessions')->where('id', $first['id'])->exists());
 
         $originalToken = $user->fresh()->remember_token;
         $this->asClient($current['cookie'])
@@ -1006,8 +1008,9 @@ class SessionManagementTest extends TestCase
     }
 
     /**
-     * Stores sessions in a SQLite database while users stay on the default
-     * connection, so the two really are different databases.
+     * Stores sessions in their own in-memory SQLite database while users stay on
+     * the default connection, so the two are independent connections that cannot
+     * share a transaction (whatever driver the default connection uses).
      */
     private function useSqliteSessionConnection(): void
     {
