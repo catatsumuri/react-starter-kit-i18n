@@ -4,11 +4,13 @@ namespace Tests\Feature\Settings;
 
 use App\Actions\Sessions\ManageDatabaseSessions;
 use App\Models\User;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Session\DatabaseSessionHandler;
 use Illuminate\Session\Store;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Inertia\Testing\AssertableInertia as Assert;
 use Mockery\MockInterface;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -768,6 +770,57 @@ class SessionManagementTest extends TestCase
         $this->asClient(null, $attacker['remember'])->get(route('dashboard'))->assertRedirect(route('login'));
     }
 
+    public function test_a_session_that_vanishes_before_deletion_is_reported_as_partial_on_a_separate_connection(): void
+    {
+        $this->useSeparateSessionConnection();
+        [$user, $current, $attacker] = $this->userWithRememberedSecondSession();
+        $originalToken = $user->fresh()->remember_token;
+
+        $this->partialMock(ManageDatabaseSessions::class, function (MockInterface $mock): void {
+            $mock->shouldAllowMockingProtectedMethods();
+            $mock->shouldReceive('deleteSession')->andReturn(0);
+        });
+
+        $this->asClient($current['cookie'])
+            ->delete(route('sessions.destroy', app(ManageDatabaseSessions::class)->fingerprint($user, $attacker['id'])))
+            ->assertRedirect()
+            ->assertSessionHas('inertia.flash_data.toast.type', 'error')
+            ->assertSessionHas('inertia.flash_data.toast.message', __('Remember me sign-ins were ended, but sessions could not be removed. Please try again.'));
+
+        $this->assertNotSame($originalToken, $user->fresh()->remember_token);
+        $this->asClient(null, $attacker['remember'])->get(route('dashboard'))->assertRedirect(route('login'));
+    }
+
+    public function test_revocation_works_with_sessions_stored_on_a_different_database_driver(): void
+    {
+        $this->useSqliteSessionConnection();
+        $user = User::factory()->create();
+        $current = $this->signIn($user);
+        $first = $this->signInRemembered($user);
+        $second = $this->signInRemembered($user);
+        $this->confirmPassword($current['cookie']);
+        $sessions = DB::connection('session_sqlite');
+
+        $this->assertTrue($sessions->table('sessions')->where('id', $first['id'])->exists());
+        $this->assertNotSame(DB::connection()->getDriverName(), $sessions->getDriverName());
+
+        $originalToken = $user->fresh()->remember_token;
+        $this->asClient($current['cookie'])
+            ->delete(route('sessions.destroy', app(ManageDatabaseSessions::class)->fingerprint($user, $first['id'])))
+            ->assertRedirect()
+            ->assertSessionHas('inertia.flash_data.toast.type', 'success');
+
+        $this->assertFalse($sessions->table('sessions')->where('id', $first['id'])->exists());
+        $this->assertNotSame($originalToken, $user->fresh()->remember_token);
+        $this->asClient(null, $first['remember'])->get(route('dashboard'))->assertRedirect(route('login'));
+
+        $this->asClient($current['cookie'])->delete(route('sessions.destroy-others'))->assertRedirect();
+
+        $this->assertSame(1, $sessions->table('sessions')->where('user_id', $user->id)->count());
+        $this->asClient(null, $second['remember'])->get(route('dashboard'))->assertRedirect(route('login'));
+        $this->asClient($current['cookie'])->get(route('dashboard'))->assertOk();
+    }
+
     public function test_a_failing_delete_while_revoking_other_sessions_changes_nothing(): void
     {
         [$user, $current, $attacker] = $this->userWithRememberedSecondSession();
@@ -949,6 +1002,29 @@ class SessionManagementTest extends TestCase
         DB::purge('session_alt');
         $pdo = DB::connection()->getPdo();
         DB::connection('session_alt')->setPdo($pdo)->setReadPdo($pdo);
+        $this->app['session']->forgetDrivers();
+    }
+
+    /**
+     * Stores sessions in a SQLite database while users stay on the default
+     * connection, so the two really are different databases.
+     */
+    private function useSqliteSessionConnection(): void
+    {
+        config([
+            'database.connections.session_sqlite' => ['driver' => 'sqlite', 'database' => ':memory:', 'prefix' => '', 'foreign_key_constraints' => false],
+            'session.connection' => 'session_sqlite',
+        ]);
+
+        DB::purge('session_sqlite');
+        Schema::connection('session_sqlite')->create('sessions', function (Blueprint $table): void {
+            $table->string('id')->primary();
+            $table->unsignedBigInteger('user_id')->nullable()->index();
+            $table->string('ip_address', 45)->nullable();
+            $table->text('user_agent')->nullable();
+            $table->longText('payload');
+            $table->integer('last_activity')->index();
+        });
         $this->app['session']->forgetDrivers();
     }
 

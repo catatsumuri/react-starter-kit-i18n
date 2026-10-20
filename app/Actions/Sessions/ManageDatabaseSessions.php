@@ -191,7 +191,7 @@ class ManageDatabaseSessions
      * only rotated when $shouldReset accepts the deletion result. On separate
      * connections that is impossible, so the token is rotated first (a deleted
      * session could otherwise be recreated by a remember me cookie) and a failing
-     * deletion is reported as a partial result.
+     * or empty deletion is reported as a partial result.
      *
      * @template T
      *
@@ -218,10 +218,18 @@ class ManageDatabaseSessions
         $this->resetRememberToken($user);
 
         try {
-            return $delete();
+            $result = $delete();
         } catch (Throwable $exception) {
             throw new SessionRevocationException(rememberMeReset: true, previous: $exception);
         }
+
+        // The token is already rotated, so "nothing deleted" must not look like
+        // an untouched account: report it as a partial result instead.
+        if (! $shouldReset($result)) {
+            throw new SessionRevocationException(rememberMeReset: true);
+        }
+
+        return $result;
     }
 
     private function sharesConnectionWithUsers(User $user): bool
