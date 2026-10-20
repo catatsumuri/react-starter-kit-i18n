@@ -2,9 +2,9 @@
 
 namespace Tests\Feature;
 
+use App\Models\Activity;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Spatie\Activitylog\Models\Activity;
 use Tests\TestCase;
 use Throwable;
 
@@ -33,6 +33,43 @@ class SecurityEventImmutabilityTest extends TestCase
         $this->attempt(fn () => $event->forceDelete());
 
         $this->assertModelExists($event);
+    }
+
+    public function test_renaming_the_log_does_not_bypass_the_update_guard(): void
+    {
+        $event = $this->securityEvent();
+
+        $this->attempt(function () use ($event): void {
+            $event->log_name = 'other';
+            $event->description = 'tampered';
+            $event->save();
+        });
+
+        $stored = Activity::query()->findOrFail($event->getKey());
+
+        $this->assertSame('security', $stored->log_name);
+        $this->assertSame('login.failed', $stored->description);
+    }
+
+    public function test_renaming_the_log_does_not_bypass_the_delete_guard(): void
+    {
+        $event = $this->securityEvent();
+
+        $event->log_name = 'other';
+        $this->attempt(fn () => $event->delete());
+
+        $this->assertModelExists($event);
+    }
+
+    public function test_a_record_loaded_from_the_database_is_guarded_after_renaming_the_log(): void
+    {
+        $this->securityEvent();
+        $loaded = Activity::query()->sole();
+
+        $loaded->log_name = 'other';
+        $this->attempt(fn () => $loaded->delete());
+
+        $this->assertSame(1, Activity::query()->where('log_name', 'security')->count());
     }
 
     public function test_deleting_the_subject_user_keeps_its_security_events(): void
