@@ -25,12 +25,13 @@ class SecurityEventLoggingTest extends TestCase
         $event = Activity::inLog('security')->sole();
 
         $this->assertSame('password.changed', $event->description);
+        $this->assertSame('success', $event->getProperty('result'));
         $this->assertTrue($event->causer->is($user));
         $this->assertTrue($event->subject->is($user));
         $this->assertStringNotContainsString('new-secret-value', json_encode($event->properties));
     }
 
-    public function test_a_failed_password_change_does_not_record_a_security_event(): void
+    public function test_a_wrong_current_password_records_a_failed_password_change(): void
     {
         $user = User::factory()->create();
 
@@ -40,7 +41,14 @@ class SecurityEventLoggingTest extends TestCase
             'password_confirmation' => 'new-secret-value',
         ]);
 
-        $this->assertSame(0, Activity::inLog('security')->count());
+        $event = Activity::inLog('security')->sole();
+
+        $this->assertSame('password.change_failed', $event->description);
+        $this->assertSame('failure', $event->getProperty('result'));
+        $this->assertTrue($event->subject->is($user));
+        $this->assertTrue(password_verify('password', $user->fresh()->password));
+        $this->assertStringNotContainsString('wrong-password', json_encode($event->properties));
+        $this->assertStringNotContainsString('new-secret-value', json_encode($event->properties));
     }
 
     public function test_a_cancelled_password_update_is_not_recorded_as_a_change(): void
@@ -179,14 +187,19 @@ class SecurityEventLoggingTest extends TestCase
         $this->assertSame($user->id, $event->causer_id);
     }
 
-    public function test_a_wrong_password_does_not_delete_or_record_the_account(): void
+    public function test_a_wrong_password_does_not_delete_the_account_and_records_the_failure(): void
     {
         $user = User::factory()->create();
 
         $this->actingAs($user)->delete(route('profile.destroy'), ['password' => 'wrong-password']);
 
         $this->assertModelExists($user);
-        $this->assertSame(0, Activity::inLog('security')->count());
+
+        $event = Activity::inLog('security')->sole();
+
+        $this->assertSame('account.delete_failed', $event->description);
+        $this->assertSame('failure', $event->getProperty('result'));
+        $this->assertTrue($event->subject->is($user));
     }
 
     public function test_a_cancelled_account_deletion_is_not_recorded(): void

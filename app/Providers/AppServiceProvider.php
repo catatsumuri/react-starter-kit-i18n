@@ -6,6 +6,7 @@ use App\Actions\LogSecurityEvent;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Closure;
+use Illuminate\Auth\Events\Failed;
 use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
@@ -16,6 +17,7 @@ use Laravel\Fortify\Events\RecoveryCodesGenerated;
 use Laravel\Fortify\Events\TwoFactorAuthenticationConfirmed;
 use Laravel\Fortify\Events\TwoFactorAuthenticationDisabled;
 use Laravel\Fortify\Events\TwoFactorAuthenticationEnabled;
+use Laravel\Fortify\Events\TwoFactorAuthenticationFailed;
 use Laravel\Fortify\Fortify;
 use Laravel\Passkeys\Events\PasskeyDeleted;
 use Laravel\Passkeys\Events\PasskeyRegistered;
@@ -90,6 +92,21 @@ class AppServiceProvider extends ServiceProvider
         Event::listen(RecoveryCodesGenerated::class, fn (RecoveryCodesGenerated $event) => $record(
             $event, 'mfa.recovery_codes.regenerated',
             fn ($event) => $saved($event->user, 'two_factor_recovery_codes'),
+        ));
+
+        /*
+         * Rejected sign-in attempts. The submitted credentials are never stored;
+         * the subject is only set when the attempt matched an existing account.
+         */
+        Event::listen(Failed::class, fn (Failed $event) => app(LogSecurityEvent::class)->failure(
+            'login.failed',
+            $event->user instanceof User ? $event->user : null,
+        ));
+
+        Event::listen(TwoFactorAuthenticationFailed::class, fn (TwoFactorAuthenticationFailed $event) => app(LogSecurityEvent::class)->failure(
+            'mfa.failed',
+            $event->user instanceof User ? $event->user : null,
+            ['method' => request()->filled('recovery_code') ? 'recovery_code' : 'totp'],
         ));
 
         /*
