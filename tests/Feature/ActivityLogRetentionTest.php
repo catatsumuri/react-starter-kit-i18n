@@ -52,7 +52,7 @@ class ActivityLogRetentionTest extends TestCase
     private function activityAt(string $logName, int $daysAgo): Activity
     {
         $activity = activity($logName)->log('test');
-        $activity->forceFill(['created_at' => now()->subDays($daysAgo)])->save();
+        Activity::query()->whereKey($activity->getKey())->toBase()->update(['created_at' => now()->subDays($daysAgo)]);
 
         return $activity;
     }
