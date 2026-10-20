@@ -89,7 +89,7 @@ class SecurityEventLoggingTest extends TestCase
         $this->assertTrue(password_verify('new-secret-value', $user->fresh()->password));
     }
 
-    public function test_a_failed_password_reset_does_not_record_a_security_event(): void
+    public function test_an_invalid_reset_token_records_a_failed_password_reset(): void
     {
         $user = User::factory()->create();
 
@@ -98,10 +98,34 @@ class SecurityEventLoggingTest extends TestCase
             'email' => $user->email,
             'password' => 'new-secret-value',
             'password_confirmation' => 'new-secret-value',
-        ]);
+        ])->assertSessionHasErrors('email');
 
-        $this->assertSame(0, Activity::inLog('security')->count());
+        $event = Activity::inLog('security')->sole();
+
+        $this->assertSame('password.reset_failed', $event->description);
+        $this->assertSame('failure', $event->getProperty('result'));
+        $this->assertSame('passwords.token', $event->getProperty('reason'));
+        $this->assertTrue($event->subject->is($user));
         $this->assertTrue(password_verify('password', $user->fresh()->password));
+        $this->assertStringNotContainsString('invalid-token', json_encode($event->properties));
+        $this->assertStringNotContainsString('new-secret-value', json_encode($event->properties));
+    }
+
+    public function test_a_reset_for_an_unknown_account_records_a_failure_without_a_subject(): void
+    {
+        $this->post(route('password.update'), [
+            'token' => 'invalid-token',
+            'email' => 'nobody@example.com',
+            'password' => 'new-secret-value',
+            'password_confirmation' => 'new-secret-value',
+        ])->assertSessionHasErrors('email');
+
+        $event = Activity::inLog('security')->sole();
+
+        $this->assertSame('password.reset_failed', $event->description);
+        $this->assertSame('passwords.user', $event->getProperty('reason'));
+        $this->assertNull($event->subject_id);
+        $this->assertStringNotContainsString('nobody@example.com', json_encode($event->properties));
     }
 
     public function test_a_cancelled_password_reset_is_not_recorded(): void
