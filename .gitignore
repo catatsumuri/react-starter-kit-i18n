@@ -11,6 +11,10 @@
 /resources/js/routes
 /resources/js/wayfinder
 /vendor
+/lang/*.json
+/lang/*/
+!/lang/vendor-patches/
+!/lang/vendor-patches/**
 .DS_Store
 .env
 .env.backup
@@ -30,6 +34,7 @@ yarn-error.log
 /.agents
 /.amp
 /.claude
+/.codex
 /.cursor
 /.factory
 /.grok
@@ -37,6 +42,7 @@ yarn-error.log
 /.kiro
 /.pi
 /.mcp.json
+/.codex
 /AGENTS.md
 /CLAUDE.md
 /boost.json

@@ -12,6 +12,9 @@
         "localization"
     ],
     "license": "MIT",
+    "replace": {
+        "laravel/react-starter-kit": "*"
+    },
     "require": {
         "php": "^8.3",
         "erag/laravel-lang-sync-inertia": "^2.2",
@@ -85,7 +88,8 @@
             "@php artisan package:discover --ansi"
         ],
         "post-install-cmd": [
-            "@patch-vendor"
+            "@patch-vendor",
+            "@php artisan lang:update --ansi"
         ],
         "post-update-cmd": [
             "@php artisan install:features --ansi",
