@@ -6,7 +6,7 @@ A fork of the official [Laravel React starter kit](https://laravel.com/docs/star
 
 ## Live demo
 
-https://react-starter-kit-i18n-production-sbhkku.laravel.cloud
+https://react-starter-kit-i18n-feature-locale-switcher-w9x8ho.laravel.cloud
 
 The demo database is seeded and then locked read-only (`chmod 444`), so sign-up, login, and other writes will fail with a database-is-readonly error. It resets on every redeploy.
 

@@ -6,7 +6,7 @@
 
 ## ライブデモ
 
-https://react-starter-kit-i18n-production-sbhkku.laravel.cloud
+https://react-starter-kit-i18n-feature-locale-switcher-w9x8ho.laravel.cloud
 
 デモ用のデータベースはシード後に読み取り専用(`chmod 444`)でロックされているため、新規登録・ログインなどの書き込みは database-is-readonly エラーになります。再デプロイのたびにリセットされます。
 
