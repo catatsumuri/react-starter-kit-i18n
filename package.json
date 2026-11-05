@@ -6,6 +6,8 @@
         "build": "vp build",
         "build:ssr": "vp build && vp build --ssr",
         "dev": "vp dev",
+        "dev:preview": "vp dev --config vite.preview.config.ts",
+        "build:preview": "vp build --config vite.preview.config.ts",
         "check": "vp check",
         "check:fix": "vp check --fix",
         "types:check": "tsc --noEmit"

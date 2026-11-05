@@ -7,3 +7,4 @@ Before planning or editing, find the row whose globs match the file's path and r
 | resources/js/** | .ai/rules/js.md |
 | lang/** | .ai/rules/lang.md |
 | vendor/laravel-lang/starter-kits/** | .ai/rules/starter-kits.md |
+| mock/\*\*, index.html, vite.preview.config.ts, resources/js/pages/welcome.tsx | .ai/rules/inertia-v0-workflow.md |
